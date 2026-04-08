@@ -10,6 +10,8 @@ CLI 个人知识库，基于 [seekdb](https://docs.seekdb.ai/) 构建，支持�
 - **混合检索** - 全文搜索 + 向量语义查询
 - **实体链接** - 自动识别实体，创建关联页面
 
+<img src="https://mdn.alipayobjects.com/huamei_ytl0i7/afts/img/A*TqdfTZ-yCPwAAAAAgBAAAAgAejCYAQ/original" width="800">
+
 ## 数据采集
 
 推荐使用 [MarkSnip](https://chromewebstore.google.com/detail/kcbaglhfgbkjdnpeokaamjjkddempipm) 作为数据采集工具：
