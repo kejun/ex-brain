@@ -115,8 +115,7 @@ export async function extractRelations(
       },
     ],
     temperature: 0.1,
-    max_tokens: 2048,
-    // Disable thinking mode for faster response (qwen3.x default is thinking enabled)
+    max_tokens: 1024,
     enable_thinking: false,
   };
 
