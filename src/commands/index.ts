@@ -19,8 +19,11 @@ import {
   renderPageMarkdown,
 } from "../markdown/parser";
 import { BrainRepository } from "../repositories/brain-repo";
-import { loadSettings, SETTINGS_PATH, DEFAULT_DB_PATH } from "../settings";
+import { loadSettings, SETTINGS_PATH, DEFAULT_DB_PATH, type ResolvedLLM } from "../settings";
 import { extractRelations, entityToSlug, EntityType } from "../ai/entity-link";
+import { registerCompileCommands } from "./compile-cmd";
+import { registerGraphCommand } from "./graph-cmd";
+import { createProgress, formatDuration } from "../utils/progress";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -61,10 +64,12 @@ async function applyEntityLinks(
     return { created: 0, linked: 0 };
   }
 
+  const progress = createProgress();
   if (!json) {
-    process.stderr.write(`[entity-link] extracting entities from ${sourceSlug}...\n`);
+    progress.start(`Extracting entities from ${sourceSlug}`);
   }
 
+  const startTime = Date.now();
   const relations = await extractRelations(content, settings.llm);
   
   // Filter by confidence
@@ -73,7 +78,7 @@ async function applyEntityLinks(
   
   if (highConfidence.length === 0) {
     if (!json) {
-      process.stderr.write(`[entity-link] no high-confidence entities found in ${sourceSlug}\n`);
+      progress.fail(`No high-confidence entities found`);
     }
     return { created: 0, linked: 0 };
   }
@@ -107,8 +112,9 @@ async function applyEntityLinks(
   }
 
   if (!json) {
+    const duration = formatDuration(Date.now() - startTime);
     const entityNames = highConfidence.flatMap((r) => [r.from.name, r.to.name]);
-    process.stderr.write(`[entity-link] ${sourceSlug} → ${[...new Set(entityNames)].join(", ")} (skipped ${ignoredCount} low-confidence)\n`);
+    progress.succeed(`${[...new Set(entityNames)].join(", ")} (${created} created, ${linked} links, ${duration})`);
   }
 
   return { created, linked };
@@ -424,6 +430,8 @@ Examples:
     .command("query")
     .argument("<question>", "natural language question")
     .option("--limit <number>", "max results", "10")
+    .option("--llm", "use LLM to answer based on retrieved context", false)
+    .option("--context-limit <number>", "max pages to use as context", "5")
     .description("semantic / vector search")
     .addHelpText(
       "after",
@@ -431,12 +439,57 @@ Examples:
 Examples:
   ebrain query "What projects did we ship in Q4?"
   ebrain query "Who leads the ML team?" --limit 5
+  ebrain query "What are the key findings?" --llm
 `,
     )
     .action(async (question: string, opts: Record<string, string>) => {
       await withRepo(program, async (repo) => {
-        const hits = await repo.query(question, Number(opts.limit ?? 10));
-        print(program, hits);
+        const limit = Number(opts.limit ?? 10);
+        const hits = await repo.query(question, limit);
+        
+        // If --llm flag, generate answer based on context
+        if (opts.llm) {
+          const settings = await loadSettings();
+          if (!settings.llm.baseURL) {
+            print(program, { error: "LLM not configured. Set llm.baseURL in settings." });
+            return;
+          }
+          
+          const progress = createProgress();
+          progress.start("Searching knowledge base...");
+          
+          // Use excerpts from hits as context (avoids extra DB queries that cause segfault)
+          const contextLimit = Number(opts.contextLimit ?? 5);
+          const topHits = hits.slice(0, contextLimit);
+          
+          // Build context from search results
+          const contextPages = topHits.map(hit => ({
+            slug: hit.slug,
+            title: hit.title,
+            excerpt: hit.excerpt || "",
+          }));
+          
+          progress.update("Generating answer...");
+          const startTime = Date.now();
+          
+          const answer = await generateAnswerFromExcerpts(question, contextPages, settings.llm);
+          
+          const duration = formatDuration(Date.now() - startTime);
+          progress.succeed(`Answer generated (${duration})`);
+          
+          // Output markdown
+          console.log("\n" + answer);
+          
+          // Show sources
+          if (contextPages.length > 0) {
+            console.log("\n---\n**Sources:**\n");
+            contextPages.forEach((p, i) => {
+              console.log(`${i + 1}. [[${p.slug}|${p.title}]]`);
+            });
+          }
+        } else {
+          print(program, hits);
+        }
       });
     });
 
@@ -582,6 +635,90 @@ Examples:
       });
     },
   );
+
+  addDryRun(
+    timelineCmd
+      .command("extract")
+      .argument("<slug>", "page slug")
+      .option("--source <source>", "source identifier", "extracted")
+      .option("--default-date <date>", "default date (YYYY-MM-DD)")
+      .description("extract timeline events from page content using AI")
+      .addHelpText(
+        "after",
+        `
+Examples:
+  ebrain timeline extract companies/river-ai
+  ebrain timeline extract docs/meeting --source meeting_notes --default-date 2024-03-15
+`,
+      ),
+  ).action(async (slug: string, opts: { source?: string; defaultDate?: string; dryRun?: boolean }) => {
+    if (isDryRun(opts)) {
+      print(program, {
+        dryRun: true,
+        action: "timeline-extract",
+        slug,
+        source: opts.source ?? "extracted",
+        defaultDate: opts.defaultDate ?? new Date().toISOString().slice(0, 10),
+      });
+      return;
+    }
+    await withRepo(program, async (repo) => {
+      const page = await repo.getPage(slug);
+      if (!page) {
+        throw new Error(`page not found: ${slug}`);
+      }
+      const settings = await loadSettings();
+      
+      const progress = createProgress();
+      progress.start(`Extracting timeline from ${slug}...`);
+      const startTime = Date.now();
+      
+      const result = await repo.extractAndAddTimeline(
+        slug,
+        page.compiledTruth,
+        opts.source ?? "extracted",
+        opts.defaultDate ?? new Date().toISOString().slice(0, 10),
+        settings.llm,
+      );
+      
+      const duration = formatDuration(Date.now() - startTime);
+      
+      if (result.entries.length > 0) {
+        progress.succeed(`${result.entries.length} events extracted (${duration})`);
+      } else {
+        progress.stop();
+        process.stderr.write(`No events found (${duration})\n`);
+      }
+      
+      print(program, {
+        ok: true,
+        action: "timeline-extract",
+        slug,
+        entriesAdded: result.entries.length,
+        entries: result.entries,
+        confidence: result.confidence,
+      });
+    });
+  });
+
+  timelineCmd
+    .command("global")
+    .option("--limit <number>", "max results", "100")
+    .description("list timeline entries across all pages")
+    .addHelpText(
+      "after",
+        `
+Examples:
+  ebrain timeline global
+  ebrain timeline global --limit 20
+`,
+    )
+    .action(async (opts: Record<string, string>) => {
+      await withRepo(program, async (repo) => {
+        const entries = await repo.timelineGlobal(Number(opts.limit ?? 100));
+        print(program, entries);
+      });
+    });
 
   // -- tag (subcommands) ----------------------------------------------------
 
@@ -775,8 +912,11 @@ Examples:
 
       const jsonOut = isJson(program);
       const settings = await loadSettings();
+      const progress = createProgress();
+      const startTime = Date.now();
       
       // Phase 1: Parse all files and collect data
+      progress.start(`Scanning ${files.length} files...`);
       const fileData: Array<{
         file: string;
         slug: string;
@@ -801,9 +941,12 @@ Examples:
       }
       
       // Phase 2: Write all pages first
+      progress.update(`Writing ${fileData.length} pages...`);
       for (let i = 0; i < fileData.length; i++) {
         const { slug, parsed } = fileData[i]!;
-        progress("import " + slug, i + 1, fileData.length, jsonOut);
+        if (!jsonOut && i % 10 === 0) {
+          progress.update(`Writing pages... ${i + 1}/${fileData.length}`);
+        }
         await repo.putPage({
           slug,
           type: String(parsed.frontmatter.type ?? inferTypeFromSlug(slug)),
@@ -815,13 +958,16 @@ Examples:
       }
       
       // Phase 3: Parallel entity extraction (main optimization)
-      // Process in parallel batches to avoid overwhelming the API
+      progress.update("Extracting entities...");
       const BATCH_SIZE = 10;
       const entityResults = new Map<string, Awaited<ReturnType<typeof extractRelations>>>();
       
       if (settings.llm.baseURL) {
         for (let i = 0; i < fileData.length; i += BATCH_SIZE) {
           const batch = fileData.slice(i, i + BATCH_SIZE).filter(d => d.tags.length === 0);
+          if (!jsonOut) {
+            progress.update(`Extracting entities... ${Math.min(i + BATCH_SIZE, fileData.length)}/${fileData.length}`);
+          }
           const batchPromises = batch.map(async ({ slug, content }) => {
             const relations = await extractRelations(content, settings.llm);
             return { slug, relations };
@@ -834,6 +980,7 @@ Examples:
       }
       
       // Phase 4: Write links, tags, timeline, and entity pages
+      progress.update("Creating links and timeline...");
       let linkCount = 0;
       let timelineCount = 0;
       let entityCount = 0;
@@ -882,12 +1029,11 @@ Examples:
             await repo.link(slug, toSlug, `Mentions ${r.to.name}`);
             linkCount += 3;
           }
-          if (!jsonOut) {
-            const names = highConfidence.flatMap(r => [r.from.name, r.to.name]);
-            process.stderr.write(`[entity-link] ${slug} → ${[...new Set(names)].join(", ")}\n`);
-          }
         }
       }
+      
+      const duration = formatDuration(Date.now() - startTime);
+      progress.succeed(`${files.length} files imported, ${entityCount} entities, ${linkCount} links (${duration})`);
       
       print(program, {
         importedFiles: files.length,
@@ -1122,6 +1268,12 @@ Examples:
       });
     });
 
+  // Register compile and smart-ingest commands
+  registerCompileCommands(program);
+
+  // Register graph command
+  registerGraphCommand(program);
+
   // -- serve / tools-json ---------------------------------------------------
 
   program
@@ -1171,12 +1323,9 @@ async function withRepo(
   const dbPath = cliDb ?? settings.dbPath;
   const db = await BrainDb.connect(dbPath, settings);
   const repo = new BrainRepository(db);
-  try {
-    await callback(repo);
-  } finally {
-    // Always close the database to prevent memory leaks
-    await db.close().catch(() => {});
-  }
+  await callback(repo);
+  // CLI 短生命周期应用：强制退出绕过 seekdb native 模块的 cleanup bug
+  process.exit(0);
 }
 
 function print(program: Command, payload: unknown): void {
@@ -1214,4 +1363,85 @@ function normalizeLinkSlug(path: string): string {
     .replace(/^\.\//, "")
     .replace(/^\.\.\//g, "")
     .replace(/\.md$/, "");
+}
+
+// ---------------------------------------------------------------------------
+// LLM Answer Generation
+// ---------------------------------------------------------------------------
+
+interface ContextPage {
+  slug: string;
+  title: string;
+  excerpt: string;
+}
+
+async function generateAnswerFromExcerpts(
+  question: string,
+  pages: ContextPage[],
+  llm: ResolvedLLM,
+): Promise<string> {
+  const apiKey = llm.apiKey || process.env[llm.apiKeyEnv] || "";
+  if (!apiKey) {
+    return "Error: LLM API key not configured.";
+  }
+
+  // Build context from page excerpts
+  const context = pages
+    .map((p, i) => {
+      return `## Source ${i + 1}: ${p.title}\n**Slug:** ${p.slug}\n\n${p.excerpt}`;
+    })
+    .join("\n\n---\n\n");
+
+  const prompt = `You are answering a question based on the provided knowledge base context.
+
+## Question
+${question}
+
+## Context from Knowledge Base
+${context || "(No relevant pages found)"}
+
+## Instructions
+- Answer the question based ONLY on the provided context
+- If the context doesn't contain enough information, say so
+- Cite sources using markdown links like [Title](slug) when referencing specific information
+- Format your answer in clean markdown
+- Be concise but comprehensive
+
+## Answer`;
+
+  try {
+    const resp = await fetch(
+      llm.baseURL.endsWith("/") ? llm.baseURL + "chat/completions" : llm.baseURL + "/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: llm.model,
+          messages: [
+            {
+              role: "system",
+              content: "You are a helpful assistant that answers questions based on a knowledge base. Always cite your sources.",
+            },
+            { role: "user", content: prompt },
+          ],
+          temperature: 0.3,
+          max_tokens: 2048,
+        }),
+      },
+    );
+
+    if (!resp.ok) {
+      const text = await resp.text();
+      return `Error: LLM API failed (${resp.status}): ${text.slice(0, 200)}`;
+    }
+
+    const data = await resp.json();
+    return data.choices?.[0]?.message?.content || "(No answer generated)";
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return `Error: ${msg}`;
+  }
 }

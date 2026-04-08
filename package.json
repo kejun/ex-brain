@@ -5,7 +5,7 @@
   "module": "src/cli.ts",
   "type": "module",
   "bin": {
-    "ebrain": "./src/cli.ts"
+    "ebrain": "src/cli.ts"
   },
   "files": [
     "src",

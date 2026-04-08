@@ -6,6 +6,11 @@ import type {
   SearchHit,
   TimelineEntry,
 } from "../types";
+import type { ResolvedLLM } from "../settings";
+import type { CompileInput, CompileResult } from "../ai/compiler";
+import type { TimelineExtractionResult } from "../ai/timeline-extractor";
+import { compileTruth } from "../ai/compiler";
+import { extractTimelineEvents } from "../ai/timeline-extractor";
 import { BrainDb } from "../db/client";
 
 type SqlRow = Record<string, unknown>;
@@ -244,7 +249,16 @@ export class BrainRepository {
   async syncPageToSearch(slug: string): Promise<void> {
     const page = await this.getPage(slug);
     if (!page) return;
-    const doc = `${page.title}\n\n${page.compiledTruth}\n\n${page.timeline}`;
+    const fullDoc = `${page.title}\n\n${page.compiledTruth}\n\n${page.timeline}`;
+    
+    // Truncate to avoid embedding API limits (most models have 8192 token limit)
+    // Conservative: ~4 chars per token, so 8192 tokens ≈ 32000 chars
+    // But some models count differently, use 8000 chars as safe limit
+    const MAX_DOC_LENGTH = 8000;
+    const doc = fullDoc.length > MAX_DOC_LENGTH 
+      ? fullDoc.slice(0, MAX_DOC_LENGTH) + '\n... (truncated)'
+      : fullDoc;
+    
     const meta = {
       slug: page.slug,
       title: page.title,
@@ -267,7 +281,13 @@ export class BrainRepository {
     const validPages = pages.filter((p): p is PageRecord => p !== null);
     if (validPages.length === 0) return;
     
-    const docs = validPages.map(p => `${p.title}\n\n${p.compiledTruth}\n\n${p.timeline}`);
+    const MAX_DOC_LENGTH = 8000;
+    const docs = validPages.map(p => {
+      const fullDoc = `${p.title}\n\n${p.compiledTruth}\n\n${p.timeline}`;
+      return fullDoc.length > MAX_DOC_LENGTH
+        ? fullDoc.slice(0, MAX_DOC_LENGTH) + '\n... (truncated)'
+        : fullDoc;
+    });
     const metas = validPages.map(p => ({
       slug: p.slug,
       title: p.title,
@@ -339,6 +359,72 @@ export class BrainRepository {
         entry.detail,
         nowIso(),
       ],
+    );
+  }
+
+  /**
+   * Add multiple timeline entries in batch.
+   */
+  async timelineAddBatch(entries: TimelineEntry[]): Promise<void> {
+    if (entries.length === 0) return;
+    const now = nowIso();
+    for (const entry of entries) {
+      await this.db.client.execute(
+        `INSERT INTO timeline_entries (page_slug, date, source, summary, detail, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [entry.pageSlug, entry.date, entry.source, entry.summary, entry.detail, now],
+      );
+    }
+  }
+
+  /**
+   * Get timeline entries across all pages, sorted by date.
+   */
+  async timelineGlobal(limit = 100): Promise<TimelineEntry[]> {
+    const rows = many<{ id: number; page_slug: string; date: string; source: string; summary: string; detail: string }>(
+      await this.db.client.execute(
+        `SELECT id, page_slug, date, source, summary, detail
+         FROM timeline_entries
+         ORDER BY date DESC, id DESC
+         LIMIT ?`,
+        [limit],
+      ),
+    );
+    return rows.map((row) => ({
+      id: row.id,
+      pageSlug: row.page_slug,
+      date: row.date,
+      source: row.source,
+      summary: row.summary,
+      detail: row.detail,
+    }));
+  }
+
+  /**
+   * Delete a timeline entry by ID.
+   */
+  async timelineDelete(id: number): Promise<void> {
+    await this.db.client.execute(
+      "DELETE FROM timeline_entries WHERE id = ?",
+      [id],
+    );
+  }
+
+  /**
+   * Update a timeline entry by ID.
+   */
+  async timelineUpdate(id: number, updates: Partial<TimelineEntry>): Promise<void> {
+    const fields: string[] = [];
+    const values: unknown[] = [];
+    if (updates.date) { fields.push("date = ?"); values.push(updates.date); }
+    if (updates.source) { fields.push("source = ?"); values.push(updates.source); }
+    if (updates.summary) { fields.push("summary = ?"); values.push(updates.summary); }
+    if (updates.detail !== undefined) { fields.push("detail = ?"); values.push(updates.detail); }
+    if (fields.length === 0) return;
+    values.push(id);
+    await this.db.client.execute(
+      `UPDATE timeline_entries SET ${fields.join(", ")} WHERE id = ?`,
+      values,
     );
   }
 
@@ -508,6 +594,172 @@ export class BrainRepository {
       frontmatter: existing.frontmatter,
     });
     return false;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Smart Compilation & Timeline Integration
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Compile new information into a page's compiled truth.
+   * This is the core "brain" function that:
+   * 1. Analyzes new information
+   * 2. Updates/replaces/appends to compiled truth intelligently
+   * 3. Extracts timeline entries
+   * 4. Maintains source attribution
+   *
+   * @param slug Page slug to compile into
+   * @param newInfo New information to process
+   * @param source Source of the information
+   * @param date Date of the information
+   * @param llm LLM configuration for semantic analysis
+   * @returns Compile result with changes made
+   */
+  async compilePage(
+    slug: string,
+    newInfo: string,
+    source: string,
+    date: string,
+    llm: ResolvedLLM,
+  ): Promise<CompileResult> {
+    const page = await this.getPage(slug);
+    if (!page) {
+      // Create new page if doesn't exist
+      await this.putPage({
+        slug,
+        type: "other",
+        title: slug.split("/").pop() ?? slug,
+        compiledTruth: newInfo,
+        frontmatter: { source, date, autoCreated: true },
+      });
+      return {
+        compiledTruth: newInfo,
+        changed: true,
+        changeType: "append",
+        changeSummary: "Created new page",
+        timelineEntries: [],
+        confidence: 0.8,
+      };
+    }
+
+    const timeline = await this.timeline(slug, 20);
+    const input: CompileInput = {
+      currentTruth: page.compiledTruth,
+      timeline,
+      newInfo,
+      source,
+      date,
+      pageContext: {
+        slug: page.slug,
+        type: page.type,
+        title: page.title,
+      },
+    };
+
+    const result = await compileTruth(input, llm);
+
+    // Apply changes if any
+    if (result.changed) {
+      await this.putPage({
+        slug: page.slug,
+        type: page.type,
+        title: page.title,
+        compiledTruth: result.compiledTruth,
+        timeline: page.timeline,
+        frontmatter: page.frontmatter,
+      });
+
+      // Add timeline entries
+      if (result.timelineEntries.length > 0) {
+        await this.timelineAddBatch(result.timelineEntries);
+      }
+
+      // Sync to search index
+      await this.syncPageToSearch(slug);
+    }
+
+    return result;
+  }
+
+  /**
+   * Extract and add timeline entries from content.
+   * Uses LLM for semantic extraction, falls back to regex.
+   *
+   * @param slug Page slug
+   * @param content Content to extract timeline from
+   * @param source Source identifier
+   * @param defaultDate Default date for entries without explicit dates
+   * @param llm LLM configuration
+   * @returns Extraction result with entries added
+   */
+  async extractAndAddTimeline(
+    slug: string,
+    content: string,
+    source: string,
+    defaultDate: string,
+    llm: ResolvedLLM,
+  ): Promise<TimelineExtractionResult> {
+    const result = await extractTimelineEvents(
+      { content, source, defaultDate, pageSlug: slug },
+      llm,
+    );
+
+    if (result.entries.length > 0) {
+      await this.timelineAddBatch(result.entries);
+    }
+
+    return result;
+  }
+
+  /**
+   * Full ingestion pipeline:
+   * 1. Create/update page with content
+   * 2. Compile truth intelligently
+   * 3. Extract timeline events
+   * 4. Extract entity links
+   * 5. Sync to search
+   *
+   * @param slug Page slug
+   * @param content Full content
+   * @param source Source identifier
+   * @param type Page type
+   * @param llm LLM configuration
+   * @returns Full ingestion result
+   */
+  async ingestContent(
+    slug: string,
+    content: string,
+    source: string,
+    type: string,
+    llm: ResolvedLLM,
+  ): Promise<{
+    page: PageRecord;
+    compileResult: CompileResult;
+    timelineResult: TimelineExtractionResult;
+  }> {
+    const now = nowIso();
+    const date = now.slice(0, 10);
+
+    // Step 1: Compile truth (this creates/updates page)
+    const compileResult = await this.compilePage(slug, content, source, date, llm);
+    const page = await this.getPage(slug) as PageRecord;
+
+    // Step 2: Extract timeline events
+    const timelineResult = await this.extractAndAddTimeline(slug, content, source, date, llm);
+
+    // Step 3: Update page type if provided
+    if (type && page.type !== type) {
+      await this.putPage({
+        slug: page.slug,
+        type,
+        title: page.title,
+        compiledTruth: page.compiledTruth,
+        timeline: page.timeline,
+        frontmatter: { ...page.frontmatter, source, sourceType: type },
+      });
+    }
+
+    return { page, compileResult, timelineResult };
   }
 }
 
