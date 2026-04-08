@@ -774,20 +774,36 @@ Examples:
       }
 
       const jsonOut = isJson(program);
-      let pageCount = 0;
-      let linkCount = 0;
-      let timelineCount = 0;
+      const settings = await loadSettings();
+      
+      // Phase 1: Parse all files and collect data
+      const fileData: Array<{
+        file: string;
+        slug: string;
+        parsed: ReturnType<typeof parsePageMarkdown>;
+        content: string;
+        wikiLinks: string[];
+        timelineEntries: ReturnType<typeof extractTimelineLines>;
+        tags: string[];
+      }> = [];
+      
       for (const file of files) {
-        pageCount += 1;
         const rawSlug = pathToSlug(file, root);
         const slug = normalizeLongSlug(rawSlug);
-        if (slug !== rawSlug) {
-          progress("import " + rawSlug + " → " + slug, pageCount, files.length, jsonOut);
-        } else {
-          progress("import " + slug, pageCount, files.length, jsonOut);
-        }
         const content = await readTextFile(file);
         const parsed = parsePageMarkdown(content);
+        const wikiLinks = extractWikiStyleLinks(content).map(normalizeLinkSlug);
+        const timelineEntries = extractTimelineLines(parsed.timeline);
+        const tags = Array.isArray(parsed.frontmatter.tags)
+          ? parsed.frontmatter.tags.filter((t): t is string => typeof t === "string")
+          : [];
+        fileData.push({ file, slug, parsed, content, wikiLinks, timelineEntries, tags });
+      }
+      
+      // Phase 2: Write all pages first
+      for (let i = 0; i < fileData.length; i++) {
+        const { slug, parsed } = fileData[i]!;
+        progress("import " + slug, i + 1, fileData.length, jsonOut);
         await repo.putPage({
           slug,
           type: String(parsed.frontmatter.type ?? inferTypeFromSlug(slug)),
@@ -796,13 +812,41 @@ Examples:
           timeline: parsed.timeline,
           frontmatter: parsed.frontmatter,
         });
-
-        for (const link of extractWikiStyleLinks(content)) {
-          await repo.link(slug, normalizeLinkSlug(link), "import");
-          linkCount += 1;
+      }
+      
+      // Phase 3: Parallel entity extraction (main optimization)
+      // Process in parallel batches to avoid overwhelming the API
+      const BATCH_SIZE = 5;
+      const entityResults = new Map<string, Awaited<ReturnType<typeof extractRelations>>>();
+      
+      if (settings.llm.baseURL) {
+        for (let i = 0; i < fileData.length; i += BATCH_SIZE) {
+          const batch = fileData.slice(i, i + BATCH_SIZE).filter(d => d.tags.length === 0);
+          const batchPromises = batch.map(async ({ slug, content }) => {
+            const relations = await extractRelations(content, settings.llm);
+            return { slug, relations };
+          });
+          const results = await Promise.all(batchPromises);
+          for (const { slug, relations } of results) {
+            entityResults.set(slug, relations);
+          }
         }
-
-        for (const entry of extractTimelineLines(parsed.timeline)) {
+      }
+      
+      // Phase 4: Write links, tags, timeline, and entity pages
+      let linkCount = 0;
+      let timelineCount = 0;
+      let entityCount = 0;
+      
+      for (const { slug, wikiLinks, timelineEntries, tags, content } of fileData) {
+        // Wiki links
+        for (const link of wikiLinks) {
+          await repo.link(slug, link, "import");
+          linkCount++;
+        }
+        
+        // Timeline entries
+        for (const entry of timelineEntries) {
           await repo.timelineAdd({
             pageSlug: slug,
             date: entry.date,
@@ -810,23 +854,47 @@ Examples:
             summary: entry.summary,
             detail: "",
           });
-          timelineCount += 1;
+          timelineCount++;
         }
-
-        const tags = parsed.frontmatter.tags;
-        if (Array.isArray(tags) && tags.length > 0) {
-          for (const tag of tags) {
-            if (typeof tag === "string") await repo.tag(slug, tag);
+        
+        // Tags
+        for (const tag of tags) {
+          await repo.tag(slug, tag);
+        }
+        
+        // Entity links from parallel extraction
+        const relations = entityResults.get(slug);
+        if (relations && relations.length > 0) {
+          const highConfidence = relations.filter(r => r.confidence >= 0.6);
+          for (const r of highConfidence) {
+            const fromCandidate = entityToSlug(r.from.name, r.from.type);
+            const toCandidate = entityToSlug(r.to.name, r.to.type);
+            const fromSlug = await repo.findSimilarSlug(fromCandidate, r.from.name);
+            const toSlug = await repo.findSimilarSlug(toCandidate, r.to.name);
+            
+            const c1 = await repo.ensureEntityPage(fromSlug, r.from.type, r.from.name, r.relation, r.context, slug);
+            const c2 = await repo.ensureEntityPage(toSlug, r.to.type, r.to.name, r.relation, r.context, slug);
+            if (c1) entityCount++;
+            if (c2) entityCount++;
+            
+            await repo.link(fromSlug, toSlug, `[${r.relation}] ${r.context}`);
+            await repo.link(slug, fromSlug, `Mentions ${r.from.name}`);
+            await repo.link(slug, toSlug, `Mentions ${r.to.name}`);
+            linkCount += 3;
           }
-        } else {
-          await applyEntityLinks(repo, slug, content, jsonOut);
+          if (!jsonOut) {
+            const names = highConfidence.flatMap(r => [r.from.name, r.to.name]);
+            process.stderr.write(`[entity-link] ${slug} → ${[...new Set(names)].join(", ")}\n`);
+          }
         }
       }
+      
       print(program, {
         importedFiles: files.length,
-        pages: pageCount,
+        pages: fileData.length,
         links: linkCount,
         timelineEntries: timelineCount,
+        entities: entityCount,
       });
     });
   });
