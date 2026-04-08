@@ -816,7 +816,7 @@ Examples:
       
       // Phase 3: Parallel entity extraction (main optimization)
       // Process in parallel batches to avoid overwhelming the API
-      const BATCH_SIZE = 5;
+      const BATCH_SIZE = 10;
       const entityResults = new Map<string, Awaited<ReturnType<typeof extractRelations>>>();
       
       if (settings.llm.baseURL) {
