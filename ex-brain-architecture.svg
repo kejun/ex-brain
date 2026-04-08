@@ -1,0 +1,225 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" width="1200" height="900">
+  <style>
+    text { font-family: 'Helvetica Neue', Helvetica, Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif; }
+  </style>
+  <defs>
+    <marker id="ab" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#2563eb"/>
+    </marker>
+    <marker id="ag" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#16a34a"/>
+    </marker>
+    <marker id="ap" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#9333ea"/>
+    </marker>
+    <marker id="ao" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#ea580c"/>
+    </marker>
+    <marker id="ag-dash" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#16a34a"/>
+    </marker>
+    <filter id="shadow" x="-5%" y="-5%" width="115%" height="115%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+  <rect width="1200" height="900" fill="#ffffff"/>
+  <text x="600" y="36" text-anchor="middle" font-size="20" font-weight="600" fill="#111827">ex-brain Architecture Diagram</text>
+  <text x="600" y="56" text-anchor="middle" font-size="13" fill="#6b7280">CLI Personal Knowledge Base powered by seekdb</text>
+  <text x="40" y="75" font-size="11" fill="#9ca3af" font-weight="600" text-transform="uppercase">Client Layer</text>
+  <text x="40" y="190" font-size="11" fill="#9ca3af" font-weight="600" text-transform="uppercase">CLI &amp; Command Layer</text>
+  <text x="40" y="390" font-size="11" fill="#9ca3af" font-weight="600" text-transform="uppercase">Repository &amp; Business Logic</text>
+  <text x="40" y="590" font-size="11" fill="#9ca3af" font-weight="600" text-transform="uppercase">Infrastructure Layer</text>
+  <text x="40" y="770" font-size="11" fill="#9ca3af" font-weight="600" text-transform="uppercase">External Services</text>
+  <rect x="30" y="85" width="1140" height="130" rx="10" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1" stroke-dasharray="6,3"/>
+  <text x="45" y="105" font-size="11" fill="#9ca3af">CLI Commands (commander.js)</text>
+  <rect x="30" y="310" width="1140" height="130" rx="10" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1" stroke-dasharray="6,3"/>
+  <text x="45" y="330" font-size="11" fill="#86efac">Repository &amp; Business Logic</text>
+  <rect x="30" y="510" width="1140" height="130" rx="10" fill="#faf5ff" stroke="#e9d5ff" stroke-width="1" stroke-dasharray="6,3"/>
+  <text x="45" y="530" font-size="11" fill="#c084fc">Database, Embedding &amp; AI</text>
+  <rect x="30" y="710" width="1140" height="130" rx="10" fill="#fff7ed" stroke="#fed7aa" stroke-width="1" stroke-dasharray="6,3"/>
+  <text x="45" y="730" font-size="11" fill="#fdba74">External Services &amp; Data Sources</text>
+  <g filter="url(#shadow)">
+    <rect x="100" y="120" width="120" height="60" rx="30" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.5"/>
+    <text x="160" y="146" text-anchor="middle" font-size="12" fill="#1e40af" font-weight="600">👤 User</text>
+    <text x="160" y="163" text-anchor="middle" font-size="10" fill="#6b7280">CLI / AI Agent</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="300" y="120" width="160" height="60" rx="8" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+    <text x="380" y="146" text-anchor="middle" font-size="12" fill="#111827" font-weight="600">cli.ts</text>
+    <text x="380" y="163" text-anchor="middle" font-size="10" fill="#6b7280">Entry + withRepo</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="540" y="120" width="180" height="60" rx="8" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+    <text x="630" y="146" text-anchor="middle" font-size="12" fill="#111827" font-weight="600">Commands</text>
+    <text x="630" y="163" text-anchor="middle" font-size="10" fill="#6b7280">put/get/search/query/compile</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="800" y="120" width="160" height="60" rx="8" fill="#fef3c7" stroke="#fcd34d" stroke-width="1.5"/>
+    <text x="880" y="146" text-anchor="middle" font-size="12" fill="#92400e" font-weight="600">graph-cmd.ts</text>
+    <text x="880" y="163" text-anchor="middle" font-size="10" fill="#6b7280">Web UI Server (Bun)</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="1020" y="120" width="130" height="60" rx="8" fill="#fce7f3" stroke="#f9a8d4" stroke-width="1.5"/>
+    <text x="1085" y="146" text-anchor="middle" font-size="12" fill="#9d174d" font-weight="600">MCP Server</text>
+    <text x="1085" y="163" text-anchor="middle" font-size="10" fill="#6b7280">stdio transport</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="100" y="350" width="180" height="70" rx="8" fill="#f0fdf4" stroke="#86efac" stroke-width="1.5"/>
+    <text x="190" y="376" text-anchor="middle" font-size="13" fill="#166534" font-weight="600">BrainRepository</text>
+    <text x="190" y="396" text-anchor="middle" font-size="10" fill="#6b7280">CRUD / Links / Tags</text>
+    <text x="190" y="410" text-anchor="middle" font-size="10" fill="#6b7280">Timeline / Search</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="360" y="350" width="170" height="70" rx="8" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+    <text x="445" y="376" text-anchor="middle" font-size="12" fill="#111827" font-weight="600">compilePage()</text>
+    <text x="445" y="396" text-anchor="middle" font-size="10" fill="#6b7280">Truth Merge + Timeline</text>
+    <text x="445" y="410" text-anchor="middle" font-size="10" fill="#6b7280">Entity Extraction</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="600" y="350" width="160" height="70" rx="8" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+    <text x="680" y="376" text-anchor="middle" font-size="12" fill="#111827" font-weight="600">entity-link.ts</text>
+    <text x="680" y="396" text-anchor="middle" font-size="10" fill="#6b7280">LLM Entity Extraction</text>
+    <text x="680" y="410" text-anchor="middle" font-size="10" fill="#6b7280">Slug Resolution</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="830" y="350" width="170" height="70" rx="8" fill="#ede9fe" stroke="#c4b5fd" stroke-width="1.5"/>
+    <text x="915" y="376" text-anchor="middle" font-size="12" fill="#5b21b6" font-weight="600">RAG Query Engine</text>
+    <text x="915" y="396" text-anchor="middle" font-size="10" fill="#6b7280">Multi-layer Context</text>
+    <text x="915" y="410" text-anchor="middle" font-size="10" fill="#6b7280">LLM Stream Answer</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="1060" y="350" width="110" height="70" rx="8" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+    <text x="1115" y="376" text-anchor="middle" font-size="11" fill="#111827" font-weight="600">Markdown</text>
+    <text x="1115" y="396" text-anchor="middle" font-size="10" fill="#6b7280">Parser + IO</text>
+    <text x="1115" y="410" text-anchor="middle" font-size="10" fill="#6b7280">Frontmatter</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="100" y="550" width="160" height="70" rx="8" fill="#fef3c7" stroke="#fcd34d" stroke-width="1.5"/>
+    <text x="180" y="576" text-anchor="middle" font-size="13" fill="#92400e" font-weight="600">BrainDb</text>
+    <text x="180" y="596" text-anchor="middle" font-size="10" fill="#6b7280">SeekDB Client</text>
+    <text x="180" y="610" text-anchor="middle" font-size="10" fill="#6b7280">Retry + Reconnect</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="340" y="550" width="160" height="70" rx="8" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+    <text x="420" y="576" text-anchor="middle" font-size="12" fill="#111827" font-weight="600">Embed Factory</text>
+    <text x="420" y="596" text-anchor="middle" font-size="10" fill="#6b7280">Hash / OpenAI Compat</text>
+    <text x="420" y="610" text-anchor="middle" font-size="10" fill="#6b7280">Vector Generation</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="580" y="550" width="170" height="70" rx="8" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+    <text x="665" y="576" text-anchor="middle" font-size="12" fill="#111827" font-weight="600">AI Compiler</text>
+    <text x="665" y="596" text-anchor="middle" font-size="10" fill="#6b7280">Ax Signature (LLM)</text>
+    <text x="665" y="610" text-anchor="middle" font-size="10" fill="#6b7280">Timeline Extractor</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="820" y="550" width="150" height="70" rx="8" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+    <text x="895" y="576" text-anchor="middle" font-size="12" fill="#111827" font-weight="600">Settings / Config</text>
+    <text x="895" y="596" text-anchor="middle" font-size="10" fill="#6b7280">~/.ebrain/settings.json</text>
+    <text x="895" y="610" text-anchor="middle" font-size="10" fill="#6b7280">LLM + Embed Config</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="1040" y="550" width="130" height="70" rx="8" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+    <text x="1105" y="576" text-anchor="middle" font-size="12" fill="#111827" font-weight="600">SQL Schema</text>
+    <text x="1105" y="596" text-anchor="middle" font-size="10" fill="#6b7280">Pages / Links</text>
+    <text x="1105" y="610" text-anchor="middle" font-size="10" fill="#6b7280">Tags / Timeline / Raw</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="100" y="750" width="180" height="60" rx="8" fill="#ffedd5" stroke="#fdba74" stroke-width="1.5"/>
+    <text x="190" y="776" text-anchor="middle" font-size="12" fill="#9a3412" font-weight="600">seekdb (Embedded)</text>
+    <text x="190" y="793" text-anchor="middle" font-size="10" fill="#6b7280">SQLite + Vector Search</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="350" y="750" width="160" height="60" rx="8" fill="#ffedd5" stroke="#fdba74" stroke-width="1.5"/>
+    <text x="430" y="776" text-anchor="middle" font-size="12" fill="#9a3412" font-weight="600">seekdb (Remote)</text>
+    <text x="430" y="793" text-anchor="middle" font-size="10" fill="#6b7280">TCP Client Mode</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="580" y="750" width="170" height="60" rx="8" fill="#f0fdf4" stroke="#86efac" stroke-width="1.5"/>
+    <text x="665" y="776" text-anchor="middle" font-size="12" fill="#166534" font-weight="600">LLM Provider</text>
+    <text x="665" y="793" text-anchor="middle" font-size="10" fill="#6b7280">Qwen / GPT / Compatible</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="820" y="750" width="160" height="60" rx="8" fill="#f0fdf4" stroke="#86efac" stroke-width="1.5"/>
+    <text x="900" y="776" text-anchor="middle" font-size="12" fill="#166534" font-weight="600">Embedding API</text>
+    <text x="900" y="793" text-anchor="middle" font-size="10" fill="#6b7280">text-embedding-v4</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="1040" y="750" width="130" height="60" rx="8" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.5"/>
+    <text x="1105" y="776" text-anchor="middle" font-size="12" fill="#1e40af" font-weight="600">Data Sources</text>
+    <text x="1105" y="793" text-anchor="middle" font-size="10" fill="#6b7280">MarkSnip / Files / stdin</text>
+  </g>
+  <line x1="220" y1="150" x2="300" y2="150" stroke="#2563eb" stroke-width="1.5" marker-end="url(#ab)"/>
+  <line x1="460" y1="150" x2="540" y2="150" stroke="#2563eb" stroke-width="1.5" marker-end="url(#ab)"/>
+  <path d="M460,140 Q500,100 800,140" stroke="#ea580c" stroke-width="1.5" fill="none" marker-end="url(#ao)"/>
+  <path d="M460,160 Q700,200 1020,160" stroke="#9333ea" stroke-width="1.5" fill="none" marker-end="url(#ap)"/>
+  <line x1="630" y1="180" x2="190" y2="350" stroke="#2563eb" stroke-width="1.5" marker-end="url(#ab)"/>
+  <rect x="370" y="240" width="72" height="18" rx="3" fill="#ffffff" opacity="0.95"/>
+  <text x="406" y="253" text-anchor="middle" font-size="10" fill="#6b7280">repo ops</text>
+  <line x1="630" y1="180" x2="445" y2="350" stroke="#2563eb" stroke-width="1.5" marker-end="url(#ab)"/>
+  <line x1="630" y1="180" x2="680" y2="350" stroke="#2563eb" stroke-width="1.5" marker-end="url(#ab)"/>
+  <line x1="720" y1="180" x2="915" y2="350" stroke="#9333ea" stroke-width="1.5" marker-end="url(#ap)"/>
+  <rect x="770" y="248" width="62" height="18" rx="3" fill="#ffffff" opacity="0.95"/>
+  <text x="801" y="261" text-anchor="middle" font-size="10" fill="#6b7280">--llm</text>
+  <line x1="880" y1="180" x2="280" y2="350" stroke="#ea580c" stroke-width="1.5" marker-end="url(#ao)"/>
+  <line x1="1085" y1="180" x2="280" y2="350" stroke="#9333ea" stroke-width="1.5" marker-end="url(#ap)"/>
+  <line x1="190" y1="420" x2="180" y2="550" stroke="#2563eb" stroke-width="1.5" marker-end="url(#ab)"/>
+  <rect x="160" y="472" width="58" height="18" rx="3" fill="#ffffff" opacity="0.95"/>
+  <text x="189" y="485" text-anchor="middle" font-size="10" fill="#6b7280">SQL</text>
+  <line x1="445" y1="420" x2="665" y2="550" stroke="#16a34a" stroke-width="1.5" marker-end="url(#ag)"/>
+  <rect x="518" y="472" width="80" height="18" rx="3" fill="#ffffff" opacity="0.95"/>
+  <text x="558" y="485" text-anchor="middle" font-size="10" fill="#6b7280">compile()</text>
+  <line x1="680" y1="420" x2="665" y2="550" stroke="#16a34a" stroke-width="1.5" marker-end="url(#ag)"/>
+  <rect x="642" y="472" width="72" height="18" rx="3" fill="#ffffff" opacity="0.95"/>
+  <text x="678" y="485" text-anchor="middle" font-size="10" fill="#6b7280">extract()</text>
+  <line x1="915" y1="420" x2="420" y2="550" stroke="#9333ea" stroke-width="1.5" marker-end="url(#ap)"/>
+  <line x1="915" y1="420" x2="665" y2="750" stroke="#9333ea" stroke-width="1.5" marker-end="url(#ap)"/>
+  <rect x="760" y="572" width="60" height="18" rx="3" fill="#ffffff" opacity="0.95"/>
+  <text x="790" y="585" text-anchor="middle" font-size="10" fill="#6b7280">stream</text>
+  <line x1="1115" y1="420" x2="630" y2="180" stroke="#2563eb" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#ab)"/>
+  <line x1="180" y1="620" x2="190" y2="750" stroke="#2563eb" stroke-width="1.5" marker-end="url(#ab)"/>
+  <rect x="158" y="672" width="60" height="18" rx="3" fill="#ffffff" opacity="0.95"/>
+  <text x="188" y="685" text-anchor="middle" font-size="10" fill="#6b7280">local</text>
+  <path d="M260,620 Q300,680 430,750" stroke="#ea580c" stroke-width="1.5" fill="none" marker-end="url(#ao)"/>
+  <rect x="310" y="672" width="60" height="18" rx="3" fill="#ffffff" opacity="0.95"/>
+  <text x="340" y="685" text-anchor="middle" font-size="10" fill="#6b7280">remote</text>
+  <line x1="420" y1="620" x2="900" y2="750" stroke="#16a34a" stroke-width="1.5" marker-end="url(#ag)"/>
+  <path d="M420,620 Q420,680 350,750" stroke="#16a34a" stroke-width="1.5" stroke-dasharray="5,3" fill="none" marker-end="url(#ag-dash)"/>
+  <rect x="358" y="672" width="55" height="18" rx="3" fill="#ffffff" opacity="0.95"/>
+  <text x="385" y="685" text-anchor="middle" font-size="10" fill="#6b7280">hash</text>
+  <line x1="665" y1="620" x2="665" y2="750" stroke="#16a34a" stroke-width="1.5" marker-end="url(#ag)"/>
+  <rect x="638" y="672" width="55" height="18" rx="3" fill="#ffffff" opacity="0.95"/>
+  <text x="665" y="685" text-anchor="middle" font-size="10" fill="#6b7280">Ax SDK</text>
+  <line x1="895" y1="550" x2="260" y2="580" stroke="#6b7280" stroke-width="1" stroke-dasharray="4,2" marker-end="url(#ab)"/>
+  <line x1="820" y1="580" x2="500" y2="580" stroke="#6b7280" stroke-width="1" stroke-dasharray="4,2" marker-end="url(#ab)"/>
+  <line x1="820" y1="570" x2="750" y2="570" stroke="#6b7280" stroke-width="1" stroke-dasharray="4,2" marker-end="url(#ab)"/>
+  <line x1="1040" y1="580" x2="260" y2="580" stroke="#6b7280" stroke-width="1" stroke-dasharray="4,2" marker-end="url(#ab)"/>
+  <path d="M1105,750 Q1105,500 720,180" stroke="#2563eb" stroke-width="1.5" fill="none" marker-end="url(#ab)"/>
+  <rect x="1070" y="450" width="68" height="18" rx="3" fill="#ffffff" opacity="0.95"/>
+  <text x="1104" y="463" text-anchor="middle" font-size="10" fill="#6b7280">import</text>
+  <g transform="translate(30, 860)">
+    <rect width="340" height="30" rx="6" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1"/>
+    <text x="170" y="20" text-anchor="middle" font-size="11" fill="#166534" font-weight="600">Import Pipeline: Parse → Write → Entity Extract → Index</text>
+  </g>
+  <g transform="translate(400, 860)">
+    <rect width="340" height="30" rx="6" fill="#ede9fe" stroke="#c4b5fd" stroke-width="1"/>
+    <text x="170" y="20" text-anchor="middle" font-size="11" fill="#5b21b6" font-weight="600">Smart Ingest: Compile + Timeline + Entity Links + Embed</text>
+  </g>
+  <g transform="translate(770, 860)">
+    <rect width="340" height="30" rx="6" fill="#fef3c7" stroke="#fcd34d" stroke-width="1"/>
+    <text x="170" y="20" text-anchor="middle" font-size="11" fill="#92400e" font-weight="600">Graph UI: vis.js Interactive Force-Directed Visualization</text>
+  </g>
+  <g transform="translate(20, 800)">
+    <rect width="220" height="90" rx="8" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1"/>
+    <text x="10" y="18" font-size="11" fill="#6b7280" font-weight="600">Legend</text>
+    <line x1="10" y1="32" x2="40" y2="32" stroke="#2563eb" stroke-width="1.5" marker-end="url(#ab)"/>
+    <text x="46" y="36" fill="#6b7280" font-size="11">CLI / Data flow</text>
+    <line x1="10" y1="50" x2="40" y2="50" stroke="#16a34a" stroke-width="1.5" marker-end="url(#ag)"/>
+    <text x="46" y="54" fill="#6b7280" font-size="11">AI / LLM calls</text>
+    <line x1="10" y1="68" x2="40" y2="68" stroke="#9333ea" stroke-width="1.5" marker-end="url(#ap)"/>
+    <text x="46" y="72" fill="#6b7280" font-size="11">RAG / Query flow</text>
+    <line x1="110" y1="32" x2="140" y2="32" stroke="#ea580c" stroke-width="1.5" marker-end="url(#ao)"/>
+    <text x="146" y="36" fill="#6b7280" font-size="11">Graph / Web UI</text>
+    <line x1="110" y1="50" x2="140" y2="50" stroke="#6b7280" stroke-width="1" stroke-dasharray="4,2" marker-end="url(#ab)"/>
+    <text x="146" y="54" fill="#6b7280" font-size="11">Configuration</text>
+  </g>
+</svg>

@@ -1,0 +1,39 @@
+{
+  "name": "ex-brain",
+  "version": "0.2.6",
+  "description": "CLI personal knowledge base powered by seekdb",
+  "module": "src/cli.ts",
+  "type": "module",
+  "bin": {
+    "ebrain": "src/cli.ts"
+  },
+  "files": [
+    "src",
+    "!src/**/*.test.ts"
+  ],
+  "scripts": {
+    "dev": "bun run src/cli.ts",
+    "start": "bun run src/cli.ts",
+    "build": "bun build --target=bun --external onnxruntime-node --outfile dist/cli.js src/cli.ts",
+    "test": "bun test --timeout 10000 --serial"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@ax-llm/ax": "^19.0.43",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@seekdb/js-bindings": "^1.2.0",
+    "@seekdb/openai": "1.2.0",
+    "commander": "^14.0.3",
+    "gray-matter": "^4.0.3",
+    "jsonrepair": "^3.13.3",
+    "pinyin-pro": "^3.28.0",
+    "seekdb": "^1.2.0",
+    "yaml": "^2.8.3",
+    "zod": "^4.3.6"
+  }
+}

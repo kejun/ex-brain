@@ -1,0 +1,48 @@
+# dependencies (bun install)
+node_modules
+
+# output
+out
+dist
+*.tgz
+
+# code coverage
+coverage
+*.lcov
+
+# logs
+logs
+_.log
+report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
+*.jsonl
+
+# dotenv environment variable files
+.pi
+.cursor
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+.npmrc
+
+# ebrain settings & data (located at ~/.ebrain/)
+#   settings.json
+#   data/ebrain.db
+
+# caches
+.eslintcache
+.cache
+*.tsbuildinfo
+
+# IntelliJ based IDEs
+.idea
+
+# Finder (MacOS) folder config
+.DS_Store
+
+# Binary files
+bin/
+
+code-review-*.*
+pi-session-*.html
