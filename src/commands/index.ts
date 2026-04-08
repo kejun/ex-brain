@@ -800,7 +800,7 @@ Examples:
         fileData.push({ file, slug, parsed, content, wikiLinks, timelineEntries, tags });
       }
       
-      // Phase 2: Write all pages first (skip embedding for batch)
+      // Phase 2: Write all pages first
       for (let i = 0; i < fileData.length; i++) {
         const { slug, parsed } = fileData[i]!;
         progress("import " + slug, i + 1, fileData.length, jsonOut);
@@ -811,10 +811,8 @@ Examples:
           compiledTruth: parsed.compiledTruth,
           timeline: parsed.timeline,
           frontmatter: parsed.frontmatter,
-        }); // use individual embedding for stability
+        });
       }
-      
-      // Note: Individual embedding is more stable than batch for large imports
       
       // Phase 3: Parallel entity extraction (main optimization)
       // Process in parallel batches to avoid overwhelming the API
