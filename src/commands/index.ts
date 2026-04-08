@@ -811,11 +811,10 @@ Examples:
           compiledTruth: parsed.compiledTruth,
           timeline: parsed.timeline,
           frontmatter: parsed.frontmatter,
-        }, true); // skip embedding for batch
+        }); // use individual embedding for stability
       }
       
-      // Batch sync all embeddings at once
-      await repo.syncPagesToSearch(fileData.map(d => d.slug));
+      // Note: Individual embedding is more stable than batch for large imports
       
       // Phase 3: Parallel entity extraction (main optimization)
       // Process in parallel batches to avoid overwhelming the API

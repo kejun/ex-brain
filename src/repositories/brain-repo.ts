@@ -434,14 +434,19 @@ export class BrainRepository {
       return candidateSlug;
     }
 
-    // 2. Semantic search for title match
-    const hits = await this.search(entityName, 1);
-    if (hits.length > 0) {
-      const best = hits[0]!;
-      // Score threshold for hybrid search: 0.75 is a safe bet for exact/near-exact title match
-      if (best.score > 0.75) {
-        return best.slug;
+    // 2. Semantic search for title match - skip if no embeddings available
+    // This is important for import speed: avoid slow search during batch import
+    try {
+      const hits = await this.search(entityName, 1);
+      if (hits.length > 0) {
+        const best = hits[0]!;
+        // Higher threshold to avoid false matches during import
+        if (best.score > 0.9) {
+          return best.slug;
+        }
       }
+    } catch {
+      // Search may fail during batch import, ignore and return candidate
     }
 
     // 3. Return candidate
