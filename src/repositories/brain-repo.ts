@@ -67,7 +67,7 @@ export class BrainRepository {
     };
   }
 
-  async putPage(input: PutPageInput): Promise<PageRecord> {
+  async putPage(input: PutPageInput, skipEmbed = false): Promise<PageRecord> {
     const now = nowIso();
     const existing = await this.getPage(input.slug);
     const createdAt = existing?.createdAt ?? now;
@@ -94,7 +94,9 @@ export class BrainRepository {
         now,
       ],
     );
-    await this.syncPageToSearch(input.slug);
+    if (!skipEmbed) {
+      await this.syncPageToSearch(input.slug);
+    }
     return (await this.getPage(input.slug)) as PageRecord;
   }
 
@@ -253,6 +255,30 @@ export class BrainRepository {
       ids: [page.slug],
       documents: [doc],
       metadatas: [meta],
+    });
+  }
+
+  /**
+   * Batch sync multiple pages to search index.
+   * More efficient than calling syncPageToSearch for each page.
+   */
+  async syncPagesToSearch(slugs: string[]): Promise<void> {
+    const pages = await Promise.all(slugs.map(s => this.getPage(s)));
+    const validPages = pages.filter((p): p is PageRecord => p !== null);
+    if (validPages.length === 0) return;
+    
+    const docs = validPages.map(p => `${p.title}\n\n${p.compiledTruth}\n\n${p.timeline}`);
+    const metas = validPages.map(p => ({
+      slug: p.slug,
+      title: p.title,
+      type: p.type,
+      updatedAt: p.updatedAt,
+    }));
+    
+    await this.db.pagesCollection.upsert({
+      ids: validPages.map(p => p.slug),
+      documents: docs,
+      metadatas: metas,
     });
   }
 
