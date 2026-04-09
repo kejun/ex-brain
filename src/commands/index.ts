@@ -958,15 +958,17 @@ Examples:
       .command("import")
       .argument("<dir>", "directory of markdown files")
       .description("import a directory of markdown files")
+      .option("--skip-index", "skip vector indexing (useful if seekdb crashes)")
       .addHelpText(
         "after",
         `
 Examples:
   ebrain import ./docs
   ebrain import ./docs --dry-run
+  ebrain import ./docs --skip-index  # skip vector indexing
 `,
       ),
-  ).action(async (dir: string, opts: { dryRun?: boolean }) => {
+  ).action(async (dir: string, opts: { dryRun?: boolean; skipIndex?: boolean }) => {
     await withRepo(program, async (repo) => {
       const root = resolve(dir);
       const files = await collectMarkdownFiles(root);
@@ -1174,16 +1176,24 @@ Examples:
       }
       
       // Phase 5: Batch sync all pages to search index
-      if (!jsonOut) {
-        spinner.start(`Indexing ${allSlugs.length} pages for search...`);
+      if (opts.skipIndex) {
+        if (!jsonOut) {
+          info(`Skipping vector indexing (--skip-index)`);
+        }
+      } else {
+        if (!jsonOut) {
+          spinner.start(`Indexing ${allSlugs.length} pages for search...`);
+        }
+        await repo.embedAll();
+        
+        if (!jsonOut) {
+          spinner.succeed(`Search indexing complete`);
+        }
       }
-      await repo.embedAll();
       
       const duration = formatDuration(Date.now() - startTime);
       
       if (!jsonOut) {
-        spinner.succeed(`Search indexing complete`);
-        
         // Print summary
         header("Import Summary");
         keyValue("Files imported", String(files.length));

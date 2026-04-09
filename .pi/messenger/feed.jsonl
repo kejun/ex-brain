@@ -55,3 +55,7 @@
 {"ts":"2026-04-09T07:49:04.586Z","type":"edit","agent":"IronTiger","target":"/Users/kejun/Desktop/repos/ex-brain/src/ai/compiler.ts"}
 {"ts":"2026-04-09T07:49:13.926Z","type":"edit","agent":"IronTiger","target":"/Users/kejun/Desktop/repos/ex-brain/src/ai/timeline-extractor.ts"}
 {"ts":"2026-04-09T07:49:19.823Z","type":"edit","agent":"IronTiger","target":"/Users/kejun/Desktop/repos/ex-brain/src/ai/timeline-extractor.ts"}
+{"ts":"2026-04-09T07:50:51.176Z","type":"commit","agent":"IronTiger","preview":"fix: use jsonrepair for LLM JSON parsing to handle unterminated strings - Add jsonrepair dependency for robust JSON parsing - Apply jsonrepair before JSON.parse in entity-link.ts - Apply jsonrepair before JSON.parse in compiler.ts - Apply jsonrepair before JSON.parse in timeline-extractor.ts This fixes"}
+{"ts":"2026-04-09T08:03:27.963Z","type":"edit","agent":"IronTiger","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/index.ts"}
+{"ts":"2026-04-09T08:03:40.477Z","type":"edit","agent":"IronTiger","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/index.ts"}
+{"ts":"2026-04-09T08:04:13.674Z","type":"edit","agent":"IronTiger","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/index.ts"}
