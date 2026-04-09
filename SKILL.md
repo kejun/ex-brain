@@ -241,7 +241,7 @@ ebrain list --type company --json | jq '.[] | .slug'
 
 ## Tech Stack
 
-- **Database**: seekdb (embedded, SQLite file)
+- **Database**: seekdb (embedded database file)
 - **Runtime**: Bun or Node.js
 - **Embedding**: Local Hash or OpenAI Compatible API
 - **LLM**: For smart compilation, timeline extraction, entity linking

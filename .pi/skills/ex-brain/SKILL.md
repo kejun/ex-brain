@@ -241,7 +241,7 @@ ebrain list --type company --json | jq '.[] | .slug'
 
 ## 技术栈
 
-- **数据库**：seekdb（嵌入式，SQLite 文件）
+- **数据库**：seekdb（嵌入式数据库）
 - **运行时**：Bun 或 Node.js
 - **嵌入**：本地 Hash 或 OpenAI Compatible API
 - **LLM**：用于智能编译、时间线提取、实体链接
