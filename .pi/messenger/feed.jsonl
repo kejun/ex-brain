@@ -1,29 +1,3 @@
-{"ts":"2026-04-08T09:15:36.044Z","type":"edit","agent":"TrueHawk","target":"docs/article-ex-brain-intro.md"}
-{"ts":"2026-04-08T09:37:11.938Z","type":"edit","agent":"TrueHawk","target":"README.md"}
-{"ts":"2026-04-08T09:37:37.254Z","type":"edit","agent":"TrueHawk","target":"docs/article-ex-brain-intro.md"}
-{"ts":"2026-04-08T09:43:45.269Z","type":"edit","agent":"TrueHawk","target":"docs/article-ex-brain-intro.md"}
-{"ts":"2026-04-08T10:13:05.697Z","type":"leave","agent":"TrueHawk"}
-{"ts":"2026-04-08T10:14:57.960Z","type":"join","agent":"SwiftHawk"}
-{"ts":"2026-04-08T10:16:13.698Z","type":"edit","agent":"SwiftHawk","target":"/Users/kejun/Desktop/repos/ex-brain/SKILL.md"}
-{"ts":"2026-04-08T10:16:49.185Z","type":"edit","agent":"SwiftHawk","target":"/Users/kejun/Desktop/repos/ex-brain/SKILL.md"}
-{"ts":"2026-04-08T10:17:00.711Z","type":"leave","agent":"SwiftHawk"}
-{"ts":"2026-04-08T10:18:07.011Z","type":"join","agent":"EpicBear"}
-{"ts":"2026-04-08T10:49:36.359Z","type":"edit","agent":"EpicBear","target":"/Users/kejun/Desktop/repos/ex-brain/README.md"}
-{"ts":"2026-04-08T10:54:32.534Z","type":"edit","agent":"EpicBear","target":"/Users/kejun/Desktop/repos/ex-brain/package.json"}
-{"ts":"2026-04-08T10:54:35.081Z","type":"commit","agent":"EpicBear","preview":"chore: bump version to 0.1.1"}
-{"ts":"2026-04-08T10:57:37.325Z","type":"leave","agent":"EpicBear"}
-{"ts":"2026-04-09T02:38:54.807Z","type":"join","agent":"SageGrove"}
-{"ts":"2026-04-09T02:40:16.876Z","type":"edit","agent":"SageGrove","target":"/Users/kejun/Desktop/repos/ex-brain/docs/article-ex-brain-intro.md"}
-{"ts":"2026-04-09T02:40:16.879Z","type":"edit","agent":"SageGrove","target":"/Users/kejun/Desktop/repos/ex-brain/SKILL.md"}
-{"ts":"2026-04-09T02:40:16.880Z","type":"edit","agent":"SageGrove","target":"/Users/kejun/Desktop/repos/ex-brain/.pi/skills/ex-brain/SKILL.md"}
-{"ts":"2026-04-09T02:44:12.903Z","type":"join","agent":"GoldGrove"}
-{"ts":"2026-04-09T02:44:13.011Z","type":"join","agent":"TrueUnion"}
-{"ts":"2026-04-09T02:44:14.273Z","type":"join","agent":"BrightWolf"}
-{"ts":"2026-04-09T02:44:28.408Z","type":"message","agent":"GoldGrove","preview":"Hey team! GoldGrove here, ready to help. Waiting for the plan to be created."}
-{"ts":"2026-04-09T02:44:28.688Z","type":"message","agent":"TrueUnion","preview":"👋 Hey team! TrueUnion here, ready to work. Waiting for the plan to be finalized!"}
-{"ts":"2026-04-09T02:44:33.258Z","type":"plan.start","agent":"SageGrove","target":"(prompt)","preview":"max passes 1"}
-{"ts":"2026-04-09T02:44:33.259Z","type":"plan.pass.start","agent":"SageGrove","target":"(prompt)","preview":"pass 1/1"}
-{"ts":"2026-04-09T02:44:35.103Z","type":"join","agent":"OakUnion"}
 {"ts":"2026-04-09T02:44:35.508Z","type":"message","agent":"BrightWolf","preview":"Hey team! BrightWolf here, ready to help. Waiting for the plan to be created. 🐺"}
 {"ts":"2026-04-09T02:44:39.010Z","type":"message","agent":"GoldGrove","preview":"Quick overview: ex-brain is a personal knowledge base CLI tool. Has AI, MCP server, markdown processing, and database modules. Ready to tackle whatever task comes my way!"}
 {"ts":"2026-04-09T02:44:39.310Z","type":"message","agent":"SageGrove","preview":"说中文"}
@@ -67,3 +41,11 @@
 {"ts":"2026-04-09T02:46:11.765Z","type":"message","agent":"HappyKnight","preview":"Starting task-5 (错误处理与可恢复性审计) — 将分析 LLM API/数据库/文件 IO 错误处理、降级策略、日志增强"}
 {"ts":"2026-04-09T02:46:45.804Z","type":"message","agent":"QuickQuartz","preview":"开始 task-1: 架构分层与模块依赖分析"}
 {"ts":"2026-04-09T02:47:11.536Z","type":"edit","agent":"NiceBear","target":"/Users/kejun/Desktop/repos/ex-brain/.pi/messenger/crew/tasks/task-3-report.md"}
+{"ts":"2026-04-09T02:47:18.045Z","type":"commit","agent":"NiceBear","preview":"docs(task-3): 实体链接与时间线提取模块代码审查报告 分析了两个 AI 模块的以下方面: - entity-link.ts: 关系提取准确性、实体类型识别、置信度阈值 - timeline-extractor.ts: 日期解析覆盖率、事件重要性评分、fallback策略 - 两者的协同效应 发现的关键问题: - 严重: 无置信度过滤、重要性评分未使用、日期解析覆盖不足 - 主要: 硬编码默认值、无重试机制、协同缺失 产出: 详细问题清单、改进建议、优先级路线图 Task: task-3"}
+{"ts":"2026-04-09T02:47:20.965Z","type":"release","agent":"NiceBear","target":"src/ai/entity-link.ts"}
+{"ts":"2026-04-09T02:47:20.966Z","type":"release","agent":"NiceBear","target":"src/ai/timeline-extractor.ts"}
+{"ts":"2026-04-09T02:47:23.766Z","type":"task.done","agent":"NiceBear","target":"task-3","preview":"完成实体链接与时间线提取模块的代码审查分析"}
+{"ts":"2026-04-09T02:47:23.848Z","type":"task.start","agent":"OakTiger","target":"task-6","preview":"可扩展性评估与技术债务清单"}
+{"ts":"2026-04-09T02:47:24.225Z","type":"release","agent":"RedArrow","target":"src/ai/compiler.ts"}
+{"ts":"2026-04-09T02:47:25.005Z","type":"edit","agent":"IronTiger","target":"/Users/kejun/Desktop/repos/ex-brain/performance-bottleneck-analysis.md"}
+{"ts":"2026-04-09T02:47:25.926Z","type":"join","agent":"OakTiger"}
