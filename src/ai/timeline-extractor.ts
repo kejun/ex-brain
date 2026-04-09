@@ -1,5 +1,6 @@
 import type { ResolvedLLM } from "../settings";
 import type { TimelineEntry } from "../types";
+import { callLLM, resolveApiKey, isLLMConfigured } from "./llm-client";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -50,14 +51,14 @@ export async function extractTimelineEvents(
   input: TimelineExtractionInput,
   llm: ResolvedLLM,
 ): Promise<TimelineExtractionResult> {
-  const apiKey = resolveApiKey(llm);
-  if (!apiKey) {
+  if (!isLLMConfigured(llm)) {
     // Fallback: regex-based extraction
     return fallbackExtract(input);
   }
 
   const prompt = buildExtractionPrompt(input);
-  const resp = await callLLM(llm, prompt, 2048);
+  const systemPrompt = "You are a timeline extraction assistant. Extract events from unstructured text. Always output valid JSON array. Be concise and factual.";
+  const resp = await callLLM(llm, prompt, 2048, systemPrompt);
   
   if (!resp) {
     return fallbackExtract(input);
@@ -94,7 +95,8 @@ export async function extractTimelineFromRelation(
   }
 
   const prompt = buildRelationTimelinePrompt(relation, defaultDate);
-  const resp = await callLLM(llm, prompt, 512);
+  const systemPrompt = "You are a timeline extraction assistant. Extract events from relationships. Always output valid JSON array.";
+  const resp = await callLLM(llm, prompt, 512, systemPrompt);
   
   if (!resp) return null;
 
@@ -184,50 +186,6 @@ Examples:
 - "She joined as CEO last month" → [{date: "${defaultDate}", summary: "${relation.from} became CEO of ${relation.to}", importance: 4}]
 
 /no_think`;
-}
-
-// ---------------------------------------------------------------------------
-// LLM Call
-// ---------------------------------------------------------------------------
-
-async function callLLM(llm: ResolvedLLM, prompt: string, maxTokens: number): Promise<string> {
-  const apiKey = resolveApiKey(llm);
-  if (!apiKey) return "";
-
-  const body = {
-    model: llm.model,
-    messages: [
-      { role: "system", content: "You are a timeline extraction assistant. Extract events from unstructured text. Always output valid JSON array. Be concise and factual." },
-      { role: "user", content: prompt },
-    ],
-    temperature: 0.1,
-    max_tokens: maxTokens,
-    enable_thinking: false,
-  };
-
-  try {
-    const resp = await fetch(
-      llm.baseURL.endsWith("/") ? llm.baseURL + "chat/completions" : llm.baseURL + "/chat/completions",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify(body),
-      },
-    );
-
-    if (!resp.ok) {
-      const text = await resp.text();
-      console.warn(`[timeline-extractor] LLM call failed (${resp.status}): ${text.slice(0, 200)}`);
-      return "";
-    }
-
-    const data = await resp.json();
-    return data.choices?.[0]?.message?.content?.trim() ?? "";
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    console.warn(`[timeline-extractor] LLM call error: ${msg}`);
-    return "";
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -415,12 +373,6 @@ function normalizeDate(raw: string, defaultDate?: string): string {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function resolveApiKey(llm: ResolvedLLM): string {
-  if (llm.apiKey) return llm.apiKey;
-  if (llm.apiKeyEnv) return process.env[llm.apiKeyEnv] ?? "";
-  return "";
-}
 
 function deduplicateEntries(entries: TimelineEntry[]): TimelineEntry[] {
   const seen = new Map<string, TimelineEntry>();

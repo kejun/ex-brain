@@ -1,4 +1,5 @@
 import { ResolvedLLM } from "../settings";
+import { callLLM, resolveApiKey } from "./llm-client";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -91,64 +92,25 @@ export async function extractRelations(
     context = trimmed.slice(0, 4000) + "\n\n...\n\n" + trimmed.slice(-1000);
   }
 
-  const apiKey = resolveApiKey(llm);
-  if (!apiKey) return [];
+  if (!resolveApiKey(llm)) return [];
 
-  const body = {
-    model: llm.model,
-    messages: [
-      {
-        role: "system",
-        content:
-          "You are a knowledge graph extraction assistant. " +
-          "Identify relationships between named entities. " +
-          "For each relationship, provide: from entity, to entity, relation type, confidence score, and exact context sentence. " +
-          `Allowed relation types: ${RELATION_TYPES}. ` +
-          "Output ONLY a JSON array. Schema: " +
-          '{ "type": "relation", "from": {"name": "...", "type": "..."}, ' +
-          '"to": {"name": "...", "type": "..."}, "relation": "...", "context": "...", "confidence": 0.9 }. ' +
-          "Output ONLY the JSON array. /no_think",
-      },
-      {
-        role: "user",
-        content: `Extract relationships from:\n\n${context}`,
-      },
-    ],
-    temperature: 0.1,
-    max_tokens: 1024,
-    enable_thinking: false,
-  };
+  const systemPrompt =
+    "You are a knowledge graph extraction assistant. " +
+    "Identify relationships between named entities. " +
+    "For each relationship, provide: from entity, to entity, relation type, confidence score, and exact context sentence. " +
+    `Allowed relation types: ${RELATION_TYPES}. ` +
+    "Output ONLY a JSON array. Schema: " +
+    '{ "type": "relation", "from": {"name": "...", "type": "..."}, ' +
+    '"to": {"name": "...", "type": "..."}, "relation": "...", "context": "...", "confidence": 0.9 }. ' +
+    "Output ONLY the JSON array. /no_think";
+
+  const resp = await callLLM(llm, `Extract relationships from:\n\n${context}`, 1024, systemPrompt);
+  if (!resp) return [];
+
+  const match = resp.match(/\[[\s\S]*\]/);
+  if (!match) return [];
 
   try {
-    const resp = await fetch(
-      llm.baseURL.endsWith("/")
-        ? llm.baseURL + "chat/completions"
-        : llm.baseURL + "/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify(body),
-      },
-    );
-
-    if (!resp.ok) {
-      const text = await resp.text();
-      console.warn(
-        `[ebrain] Entity extraction failed (${resp.status}): ${text.slice(0, 200)}`,
-      );
-      return [];
-    }
-
-    const data = await resp.json();
-    const raw = data.choices?.[0]?.message?.content?.trim();
-    if (!raw) return [];
-
-    const match = raw.match(/\[[\s\S]*\]/);
-    if (!match) return [];
-
     const parsed = JSON.parse(match[0]) as unknown[];
     const relations: ExtractionResult = [];
 
@@ -219,8 +181,4 @@ export function normalizeRelationType(raw: string): RelationType {
   return "related_to";
 }
 
-function resolveApiKey(llm: ResolvedLLM): string {
-  if (llm.apiKey) return llm.apiKey;
-  if (llm.apiKeyEnv) return process.env[llm.apiKeyEnv] ?? "";
-  return "";
-}
+

@@ -5,6 +5,124 @@ import { BrainDb } from "../db/client";
 import { BrainRepository } from "../repositories/brain-repo";
 import { loadSettings } from "../settings";
 
+// ============================================================================
+// Error Handling Utilities
+// ============================================================================
+
+interface ToolError {
+  tool: string;
+  error: string;
+  message: string;
+  timestamp: string;
+  recoverable: boolean;
+}
+
+function formatError(toolName: string, error: unknown): ToolError {
+  const err = error as Error;
+  const errorType = err?.name ?? "UnknownError";
+  const errorMessage = err?.message ?? String(error);
+  
+  // 判断是否可恢复
+  const recoverablePatterns = [
+    "ECONNREFUSED",
+    "timeout",
+    "ETIMEDOUT",
+    "rate limit",
+    "429",
+    "503",
+    "502",
+    "timeout",
+  ];
+  const isRecoverable = recoverablePatterns.some(p => 
+    errorMessage.toLowerCase().includes(p.toLowerCase())
+  );
+
+  return {
+    tool: toolName,
+    error: errorType,
+    message: errorMessage,
+    timestamp: new Date().toISOString(),
+    recoverable: isRecoverable,
+  };
+}
+
+function logError(toolName: string, error: unknown, params?: Record<string, unknown>): void {
+  const errInfo = formatError(toolName, error);
+  console.error(`[MCP Error] Tool: ${toolName}`);
+  console.error(`  Type: ${errInfo.error}`);
+  console.error(`  Message: ${errInfo.message}`);
+  console.error(`  Recoverable: ${errInfo.recoverable}`);
+  if (params) {
+    console.error(`  Params: ${JSON.stringify(params)}`);
+  }
+  console.error(`  Timestamp: ${errInfo.timestamp}`);
+}
+
+/**
+ * 包装工具 handler，添加错误处理
+ * 确保工具错误不会导致 MCP Server 崩溃，返回友好的 JSON 错误信息
+ */
+function withErrorHandling<T extends Record<string, unknown>>(
+  toolName: string,
+  handler: (params: T) => Promise<{ content: Array<{ type: string; text: string }> }>
+) {
+  return async (params: T): Promise<{ content: Array<{ type: string; text: string }> }> => {
+    try {
+      return await handler(params);
+    } catch (error) {
+      logError(toolName, error, params);
+      const errInfo = formatError(toolName, error);
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify({
+              ok: false,
+              error: errInfo.error,
+              message: errInfo.message,
+              recoverable: errInfo.recoverable,
+              hint: errInfo.recoverable 
+                ? "This is a temporary error. Please try again later." 
+                : "Please check the input parameters or system configuration.",
+              tool: toolName,
+            }, null, 2),
+          },
+        ],
+      };
+    }
+  };
+}
+
+// 资源错误处理包装
+function withResourceErrorHandling<T extends Record<string, string>>(
+  resourceName: string,
+  handler: (uri: URL, vars: T) => Promise<{ contents: Array<{ uri: string; mimeType: string; text: string }> }>
+) {
+  return async (uri: URL, vars: T): Promise<{ contents: Array<{ uri: string; mimeType: string; text: string }> }> => {
+    try {
+      return await handler(uri, vars);
+    } catch (error) {
+      logError(resourceName, error, vars as unknown as Record<string, unknown>);
+      const errInfo = formatError(resourceName, error);
+      return {
+        contents: [
+          {
+            uri: uri.href,
+            mimeType: "application/json",
+            text: JSON.stringify({
+              ok: false,
+              error: errInfo.error,
+              message: errInfo.message,
+              recoverable: errInfo.recoverable,
+              resource: resourceName,
+            }, null, 2),
+          },
+        ],
+      };
+    }
+  };
+}
+
 export const TOOL_MANIFEST = [
   "brain_search",
   "brain_query",
@@ -38,6 +156,20 @@ export async function startMcpServer(dbPath: string): Promise<void> {
   // Search & Query Tools
   // ---------------------------------------------------------------------------
 
+  // Tool handler functions (wrapped with error handling below)
+  const brainSearchHandler = async ({ query, type, limit }: { query: string; type?: string; limit?: number }) => ({
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify(
+          await repo.search(query, limit ?? 10, type),
+          null,
+          2,
+        ),
+      },
+    ],
+  });
+
   server.registerTool(
     "brain_search",
     {
@@ -48,19 +180,17 @@ export async function startMcpServer(dbPath: string): Promise<void> {
         limit: z.number().int().positive().max(50).optional(),
       }),
     },
-    async ({ query, type, limit }) => ({
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(
-            await repo.search(query, limit ?? 10, type),
-            null,
-            2,
-          ),
-        },
-      ],
-    }),
+    withErrorHandling("brain_search", brainSearchHandler),
   );
+
+  const brainQueryHandler = async ({ question, limit }: { question: string; limit?: number }) => ({
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify(await repo.query(question, limit ?? 10), null, 2),
+      },
+    ],
+  });
 
   server.registerTool(
     "brain_query",
@@ -71,19 +201,18 @@ export async function startMcpServer(dbPath: string): Promise<void> {
         limit: z.number().int().positive().max(50).optional(),
       }),
     },
-    async ({ question, limit }) => ({
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(await repo.query(question, limit ?? 10), null, 2),
-        },
-      ],
-    }),
+    withErrorHandling("brain_query", brainQueryHandler),
   );
 
   // ---------------------------------------------------------------------------
   // Page CRUD Tools
   // ---------------------------------------------------------------------------
+
+  const brainGetHandler = async ({ slug }: { slug: string }) => ({
+    content: [
+      { type: "text", text: JSON.stringify(await repo.getPage(slug), null, 2) },
+    ],
+  });
 
   server.registerTool(
     "brain_get",
@@ -91,12 +220,19 @@ export async function startMcpServer(dbPath: string): Promise<void> {
       description: "Read a page and return its full content",
       inputSchema: z.object({ slug: z.string() }),
     },
-    async ({ slug }) => ({
-      content: [
-        { type: "text", text: JSON.stringify(await repo.getPage(slug), null, 2) },
-      ],
-    }),
+    withErrorHandling("brain_get", brainGetHandler),
   );
+
+  const brainPutHandler = async ({ slug, content, type, title }: { slug: string; content: string; type?: string; title?: string }) => {
+    const page = await repo.putPage({
+      slug,
+      type: type ?? "note",
+      title: title ?? slug,
+      compiledTruth: content,
+      timeline: "",
+    });
+    return { content: [{ type: "text", text: JSON.stringify(page, null, 2) }] };
+  };
 
   server.registerTool(
     "brain_put",
@@ -109,17 +245,13 @@ export async function startMcpServer(dbPath: string): Promise<void> {
         title: z.string().optional(),
       }),
     },
-    async ({ slug, content, type, title }) => {
-      const page = await repo.putPage({
-        slug,
-        type: type ?? "note",
-        title: title ?? slug,
-        compiledTruth: content,
-        timeline: "",
-      });
-      return { content: [{ type: "text", text: JSON.stringify(page, null, 2) }] };
-    },
+    withErrorHandling("brain_put", brainPutHandler),
   );
+
+  const brainDeleteHandler = async ({ slug }: { slug: string }) => {
+    await repo.deletePage(slug);
+    return { content: [{ type: "text", text: JSON.stringify({ ok: true, action: "delete", slug }) }] };
+  };
 
   server.registerTool(
     "brain_delete",
@@ -127,11 +259,22 @@ export async function startMcpServer(dbPath: string): Promise<void> {
       description: "Delete a page and all its related data (links, tags, timeline, raw)",
       inputSchema: z.object({ slug: z.string() }),
     },
-    async ({ slug }) => {
-      await repo.deletePage(slug);
-      return { content: [{ type: "text", text: JSON.stringify({ ok: true, action: "delete", slug }) }] };
-    },
+    withErrorHandling("brain_delete", brainDeleteHandler),
   );
+
+  const brainIngestHandler = async ({ content, source_type, source_ref }: { content: string; source_type: string; source_ref: string }) => {
+    const safeRef = source_ref.replace(/[^a-zA-Z0-9/_-]+/g, "_").slice(0, 200);
+    const slug = `ingest/${safeRef || "untitled"}`;
+    const page = await repo.putPage({
+      slug,
+      type: source_type,
+      title: source_ref,
+      compiledTruth: content,
+      timeline: "",
+      frontmatter: { source_type, source_ref },
+    });
+    return { content: [{ type: "text", text: JSON.stringify(page, null, 2) }] };
+  };
 
   server.registerTool(
     "brain_ingest",
@@ -143,24 +286,17 @@ export async function startMcpServer(dbPath: string): Promise<void> {
         source_ref: z.string(),
       }),
     },
-    async ({ content, source_type, source_ref }) => {
-      const safeRef = source_ref.replace(/[^a-zA-Z0-9/_-]+/g, "_").slice(0, 200);
-      const slug = `ingest/${safeRef || "untitled"}`;
-      const page = await repo.putPage({
-        slug,
-        type: source_type,
-        title: source_ref,
-        compiledTruth: content,
-        timeline: "",
-        frontmatter: { source_type, source_ref },
-      });
-      return { content: [{ type: "text", text: JSON.stringify(page, null, 2) }] };
-    },
+    withErrorHandling("brain_ingest", brainIngestHandler),
   );
 
   // ---------------------------------------------------------------------------
   // Link Tools
   // ---------------------------------------------------------------------------
+
+  const brainLinkHandler = async ({ from, to, context }: { from: string; to: string; context?: string }) => {
+    await repo.link(from, to, context ?? "");
+    return { content: [{ type: "text", text: JSON.stringify({ ok: true }) }] };
+  };
 
   server.registerTool(
     "brain_link",
@@ -172,11 +308,14 @@ export async function startMcpServer(dbPath: string): Promise<void> {
         context: z.string().optional(),
       }),
     },
-    async ({ from, to, context }) => {
-      await repo.link(from, to, context ?? "");
-      return { content: [{ type: "text", text: JSON.stringify({ ok: true }) }] };
-    },
+    withErrorHandling("brain_link", brainLinkHandler),
   );
+
+  const brainBacklinksHandler = async ({ slug }: { slug: string }) => ({
+    content: [
+      { type: "text", text: JSON.stringify(await repo.backlinks(slug), null, 2) },
+    ],
+  });
 
   server.registerTool(
     "brain_backlinks",
@@ -184,16 +323,21 @@ export async function startMcpServer(dbPath: string): Promise<void> {
       description: "List pages that link to this page",
       inputSchema: z.object({ slug: z.string() }),
     },
-    async ({ slug }) => ({
-      content: [
-        { type: "text", text: JSON.stringify(await repo.backlinks(slug), null, 2) },
-      ],
-    }),
+    withErrorHandling("brain_backlinks", brainBacklinksHandler),
   );
 
   // ---------------------------------------------------------------------------
   // Timeline Tools (Enhanced)
   // ---------------------------------------------------------------------------
+
+  const brainTimelineHandler = async ({ slug, limit }: { slug: string; limit?: number }) => ({
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify(await repo.timeline(slug, limit ?? 50), null, 2),
+      },
+    ],
+  });
 
   server.registerTool(
     "brain_timeline",
@@ -204,15 +348,19 @@ export async function startMcpServer(dbPath: string): Promise<void> {
         limit: z.number().int().positive().max(200).optional(),
       }),
     },
-    async ({ slug, limit }) => ({
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(await repo.timeline(slug, limit ?? 50), null, 2),
-        },
-      ],
-    }),
+    withErrorHandling("brain_timeline", brainTimelineHandler),
   );
+
+  const brainTimelineAddHandler = async ({ slug, date, summary, source, detail }: { slug: string; date: string; summary: string; source?: string; detail?: string }) => {
+    await repo.timelineAdd({
+      pageSlug: slug,
+      date,
+      summary,
+      source: source ?? "manual",
+      detail: detail ?? "",
+    });
+    return { content: [{ type: "text", text: JSON.stringify({ ok: true }) }] };
+  };
 
   server.registerTool(
     "brain_timeline_add",
@@ -226,17 +374,17 @@ export async function startMcpServer(dbPath: string): Promise<void> {
         detail: z.string().optional().describe("Optional markdown detail"),
       }),
     },
-    async ({ slug, date, summary, source, detail }) => {
-      await repo.timelineAdd({
-        pageSlug: slug,
-        date,
-        summary,
-        source: source ?? "manual",
-        detail: detail ?? "",
-      });
-      return { content: [{ type: "text", text: JSON.stringify({ ok: true }) }] };
-    },
+    withErrorHandling("brain_timeline_add", brainTimelineAddHandler),
   );
+
+  const brainTimelineListHandler = async ({ limit }: { limit?: number }) => ({
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify(await repo.timelineGlobal(limit ?? 100), null, 2),
+      },
+    ],
+  });
 
   server.registerTool(
     "brain_timeline_list",
@@ -246,15 +394,13 @@ export async function startMcpServer(dbPath: string): Promise<void> {
         limit: z.number().int().positive().max(200).optional(),
       }),
     },
-    async ({ limit }) => ({
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(await repo.timelineGlobal(limit ?? 100), null, 2),
-        },
-      ],
-    }),
+    withErrorHandling("brain_timeline_list", brainTimelineListHandler),
   );
+
+  const brainTimelineDeleteHandler = async ({ id }: { id: number }) => {
+    await repo.timelineDelete(id);
+    return { content: [{ type: "text", text: JSON.stringify({ ok: true, action: "timeline-delete", id }) }] };
+  };
 
   server.registerTool(
     "brain_timeline_delete",
@@ -264,11 +410,31 @@ export async function startMcpServer(dbPath: string): Promise<void> {
         id: z.number().int().positive().describe("Timeline entry ID to delete"),
       }),
     },
-    async ({ id }) => {
-      await repo.timelineDelete(id);
-      return { content: [{ type: "text", text: JSON.stringify({ ok: true, action: "timeline-delete", id }) }] };
-    },
+    withErrorHandling("brain_timeline_delete", brainTimelineDeleteHandler),
   );
+
+  const brainTimelineExtractHandler = async ({ slug, content, source, default_date }: { slug: string; content: string; source?: string; default_date?: string }) => {
+    const result = await repo.extractAndAddTimeline(
+      slug,
+      content,
+      source ?? "extracted",
+      default_date ?? new Date().toISOString().slice(0, 10),
+      settings.llm,
+    );
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            ok: true,
+            entriesAdded: result.entries.length,
+            entries: result.entries,
+            confidence: result.confidence,
+          }, null, 2),
+        },
+      ],
+    };
+  };
 
   server.registerTool(
     "brain_timeline_extract",
@@ -281,33 +447,39 @@ export async function startMcpServer(dbPath: string): Promise<void> {
         default_date: z.string().optional().describe("Default date (YYYY-MM-DD) for entries without explicit dates"),
       }),
     },
-    async ({ slug, content, source, default_date }) => {
-      const result = await repo.extractAndAddTimeline(
-        slug,
-        content,
-        source ?? "extracted",
-        default_date ?? new Date().toISOString().slice(0, 10),
-        settings.llm,
-      );
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify({
-              ok: true,
-              entriesAdded: result.entries.length,
-              entries: result.entries,
-              confidence: result.confidence,
-            }, null, 2),
-          },
-        ],
-      };
-    },
+    withErrorHandling("brain_timeline_extract", brainTimelineExtractHandler),
   );
 
   // ---------------------------------------------------------------------------
   // Smart Compilation Tools (Core Brain Function)
   // ---------------------------------------------------------------------------
+
+  const brainCompileHandler = async ({ slug, new_info, source, date }: { slug: string; new_info: string; source?: string; date?: string }) => {
+    const result = await repo.compilePage(
+      slug,
+      new_info,
+      source ?? "user",
+      date ?? new Date().toISOString().slice(0, 10),
+      settings.llm,
+    );
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            ok: true,
+            slug,
+            changed: result.changed,
+            changeType: result.changeType,
+            changeSummary: result.changeSummary,
+            timelineEntriesAdded: result.timelineEntries.length,
+            confidence: result.confidence,
+            compiledTruthPreview: result.compiledTruth.slice(0, 500),
+          }, null, 2),
+        },
+      ],
+    };
+  };
 
   server.registerTool(
     "brain_compile",
@@ -320,33 +492,40 @@ export async function startMcpServer(dbPath: string): Promise<void> {
         date: z.string().optional().describe("Date of information (YYYY-MM-DD)"),
       }),
     },
-    async ({ slug, new_info, source, date }) => {
-      const result = await repo.compilePage(
-        slug,
-        new_info,
-        source ?? "user",
-        date ?? new Date().toISOString().slice(0, 10),
-        settings.llm,
-      );
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify({
-              ok: true,
-              slug,
-              changed: result.changed,
-              changeType: result.changeType,
-              changeSummary: result.changeSummary,
-              timelineEntriesAdded: result.timelineEntries.length,
-              confidence: result.confidence,
-              compiledTruthPreview: result.compiledTruth.slice(0, 500),
-            }, null, 2),
-          },
-        ],
-      };
-    },
+    withErrorHandling("brain_compile", brainCompileHandler),
   );
+
+  const brainSmartIngestHandler = async ({ slug, content, source, type }: { slug: string; content: string; source?: string; type?: string }) => {
+    const result = await repo.ingestContent(
+      slug,
+      content,
+      source ?? "ingest",
+      type ?? "note",
+      settings.llm,
+    );
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            ok: true,
+            slug: result.page.slug,
+            compileResult: {
+              changed: result.compileResult.changed,
+              changeType: result.compileResult.changeType,
+              changeSummary: result.compileResult.changeSummary,
+              confidence: result.compileResult.confidence,
+            },
+            timelineResult: {
+              entriesAdded: result.timelineResult.entries.length,
+              confidence: result.timelineResult.confidence,
+            },
+            updatedAt: result.page.updatedAt,
+          }, null, 2),
+        },
+      ],
+    };
+  };
 
   server.registerTool(
     "brain_smart_ingest",
@@ -359,37 +538,7 @@ export async function startMcpServer(dbPath: string): Promise<void> {
         type: z.string().optional().describe("Page type (person, company, project, note, etc.)"),
       }),
     },
-    async ({ slug, content, source, type }) => {
-      const result = await repo.ingestContent(
-        slug,
-        content,
-        source ?? "ingest",
-        type ?? "note",
-        settings.llm,
-      );
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify({
-              ok: true,
-              slug: result.page.slug,
-              compileResult: {
-                changed: result.compileResult.changed,
-                changeType: result.compileResult.changeType,
-                changeSummary: result.compileResult.changeSummary,
-                confidence: result.compileResult.confidence,
-              },
-              timelineResult: {
-                entriesAdded: result.timelineResult.entries.length,
-                confidence: result.timelineResult.confidence,
-              },
-              updatedAt: result.page.updatedAt,
-            }, null, 2),
-          },
-        ],
-      };
-    },
+    withErrorHandling("brain_smart_ingest", brainSmartIngestHandler),
   );
 
   // ---------------------------------------------------------------------------

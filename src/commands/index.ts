@@ -940,8 +940,10 @@ Examples:
         fileData.push({ file, slug, parsed, content, wikiLinks, timelineEntries, tags });
       }
       
-      // Phase 2: Write all pages first
+      // Phase 2: Write all pages first (skip embed for performance)
+      // We'll batch sync all pages at the end
       progress.update(`Writing ${fileData.length} pages...`);
+      const allSlugs: string[] = [];
       for (let i = 0; i < fileData.length; i++) {
         const { slug, parsed } = fileData[i]!;
         if (!jsonOut && i % 10 === 0) {
@@ -954,7 +956,8 @@ Examples:
           compiledTruth: parsed.compiledTruth,
           timeline: parsed.timeline,
           frontmatter: parsed.frontmatter,
-        });
+        }, true); // skipEmbed: true for performance
+        allSlugs.push(slug);
       }
       
       // Phase 3: Parallel entity extraction (main optimization)
@@ -985,6 +988,15 @@ Examples:
       let timelineCount = 0;
       let entityCount = 0;
       
+      // Collect timeline entries for batch insert
+      const allTimelineEntries: Array<{
+        pageSlug: string;
+        date: string;
+        source: string;
+        summary: string;
+        detail: string;
+      }> = [];
+      
       for (const { slug, wikiLinks, timelineEntries, tags, content } of fileData) {
         // Wiki links
         for (const link of wikiLinks) {
@@ -992,9 +1004,9 @@ Examples:
           linkCount++;
         }
         
-        // Timeline entries
+        // Collect timeline entries for batch insert
         for (const entry of timelineEntries) {
-          await repo.timelineAdd({
+          allTimelineEntries.push({
             pageSlug: slug,
             date: entry.date,
             source: entry.source,
@@ -1031,6 +1043,15 @@ Examples:
           }
         }
       }
+      
+      // Batch insert all timeline entries
+      if (allTimelineEntries.length > 0) {
+        await repo.timelineAddBatch(allTimelineEntries);
+      }
+      
+      // Batch sync all pages to search index
+      progress.update(`Indexing ${allSlugs.length} pages...`);
+      await repo.embedAll();
       
       const duration = formatDuration(Date.now() - startTime);
       progress.succeed(`${files.length} files imported, ${entityCount} entities, ${linkCount} links (${duration})`);

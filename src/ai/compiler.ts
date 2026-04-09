@@ -1,5 +1,6 @@
 import type { ResolvedLLM } from "../settings";
 import type { TimelineEntry } from "../types";
+import { callLLM, resolveApiKey } from "./llm-client";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -116,8 +117,7 @@ async function analyzeNewInfo(
   llm: ResolvedLLM,
 ): Promise<FactAnalysis> {
   const prompt = buildAnalysisPrompt(input);
-  
-  const resp = await callLLM(llm, prompt, 2048);
+  const resp = await callLLM(llm, prompt, 2048, COMPILER_SYSTEM_PROMPT);
   const parsed = parseAnalysisResponse(resp);
   
   return parsed;
@@ -174,8 +174,7 @@ async function smartMergeTruth(
   llm: ResolvedLLM,
 ): Promise<{ compiledTruth: string; changed: boolean; changeType: CompileResult["changeType"]; changeSummary: string }> {
   const prompt = buildMergePrompt(input, analysis);
-  
-  const resp = await callLLM(llm, prompt, 4096);
+  const resp = await callLLM(llm, prompt, 4096, COMPILER_SYSTEM_PROMPT);
   const result = parseMergeResponse(resp);
   
   return result;
@@ -192,7 +191,7 @@ async function extractTimelineFromInfo(
   // Only extract timeline for significant events
   if (analysis.infoType === "status_update" || analysis.infoType === "new_event") {
     const prompt = buildTimelinePrompt(input, analysis);
-    const resp = await callLLM(llm, prompt, 1024);
+    const resp = await callLLM(llm, prompt, 1024, COMPILER_SYSTEM_PROMPT);
     return parseTimelineResponse(resp, input.pageContext?.slug ?? "");
   }
   
@@ -338,45 +337,8 @@ Rules:
 // LLM Call
 // ---------------------------------------------------------------------------
 
-async function callLLM(llm: ResolvedLLM, prompt: string, maxTokens: number): Promise<string> {
-  const apiKey = resolveApiKey(llm);
-  if (!apiKey) return "";
-
-  const body = {
-    model: llm.model,
-    messages: [
-      { role: "system", content: "You are a knowledge compilation assistant. You analyze information, extract facts, and maintain structured compiled truth. Always output valid JSON. Be precise and factual." },
-      { role: "user", content: prompt },
-    ],
-    temperature: 0.1,
-    max_tokens: maxTokens,
-    enable_thinking: false,
-  };
-
-  try {
-    const resp = await fetch(
-      llm.baseURL.endsWith("/") ? llm.baseURL + "chat/completions" : llm.baseURL + "/chat/completions",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify(body),
-      },
-    );
-
-    if (!resp.ok) {
-      const text = await resp.text();
-      console.warn(`[compiler] LLM call failed (${resp.status}): ${text.slice(0, 200)}`);
-      return "";
-    }
-
-    const data = await resp.json();
-    return data.choices?.[0]?.message?.content?.trim() ?? "";
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    console.warn(`[compiler] LLM call error: ${msg}`);
-    return "";
-  }
-}
+// Use callLLM from llm-client module with custom system prompt
+const COMPILER_SYSTEM_PROMPT = "You are a knowledge compilation assistant. You analyze information, extract facts, and maintain structured compiled truth. Always output valid JSON. Be precise and factual.";
 
 // ---------------------------------------------------------------------------
 // Response Parsing
@@ -490,11 +452,7 @@ function normalizeChangeType(raw: string): CompileResult["changeType"] {
   return "none";
 }
 
-function resolveApiKey(llm: ResolvedLLM): string {
-  if (llm.apiKey) return llm.apiKey;
-  if (llm.apiKeyEnv) return process.env[llm.apiKeyEnv] ?? "";
-  return "";
-}
+// resolveApiKey is now imported from llm-client module
 
 function appendFact(current: string, newInfo: string, source: string): string {
   const timestamp = new Date().toISOString().slice(0, 10);
