@@ -1,21 +1,3 @@
-{"ts":"2026-04-09T08:41:23.005Z","type":"edit","agent":"IronTiger","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/index.ts"}
-{"ts":"2026-04-09T08:41:30.992Z","type":"edit","agent":"IronTiger","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/index.ts"}
-{"ts":"2026-04-09T08:44:00.978Z","type":"test","agent":"IronTiger","preview":"passed"}
-{"ts":"2026-04-09T08:44:26.423Z","type":"edit","agent":"IronTiger","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/index.ts"}
-{"ts":"2026-04-09T09:00:29.943Z","type":"edit","agent":"OakXenon","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/index.ts"}
-{"ts":"2026-04-09T09:11:33.282Z","type":"edit","agent":"OakXenon","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/integration-internal.test.ts"}
-{"ts":"2026-04-09T09:11:42.969Z","type":"edit","agent":"OakXenon","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/index.ts"}
-{"ts":"2026-04-09T09:11:51.693Z","type":"test","agent":"OakXenon","preview":"failed"}
-{"ts":"2026-04-09T09:16:03.473Z","type":"edit","agent":"OakXenon","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/integration-internal.test.ts"}
-{"ts":"2026-04-09T09:16:15.096Z","type":"test","agent":"OakXenon","preview":"failed"}
-{"ts":"2026-04-09T09:19:25.499Z","type":"test","agent":"OakXenon","preview":"failed"}
-{"ts":"2026-04-09T09:19:41.805Z","type":"test","agent":"OakXenon","preview":"passed"}
-{"ts":"2026-04-09T09:20:43.864Z","type":"edit","agent":"OakXenon","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/integration.test.ts"}
-{"ts":"2026-04-09T09:21:09.328Z","type":"edit","agent":"OakXenon","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/integration.test.ts"}
-{"ts":"2026-04-09T09:21:22.427Z","type":"edit","agent":"OakXenon","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/integration.test.ts"}
-{"ts":"2026-04-09T09:24:20.549Z","type":"test","agent":"OakXenon","preview":"passed"}
-{"ts":"2026-04-09T09:25:31.164Z","type":"edit","agent":"OakXenon","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/integration.test.ts"}
-{"ts":"2026-04-09T09:28:07.295Z","type":"test","agent":"OakXenon","preview":"passed"}
 {"ts":"2026-04-09T09:30:55.068Z","type":"test","agent":"OakXenon","preview":"passed"}
 {"ts":"2026-04-09T09:33:56.897Z","type":"test","agent":"OakXenon","preview":"passed"}
 {"ts":"2026-04-09T09:35:09.260Z","type":"test","agent":"OakXenon","preview":"failed"}
@@ -58,3 +40,12 @@
 {"ts":"2026-04-09T10:55:05.999Z","type":"edit","agent":"JadeJaguar","target":"/Users/kejun/Desktop/repos/ex-brain/docs/ebrain-cli.md"}
 {"ts":"2026-04-09T10:55:22.200Z","type":"edit","agent":"JadeJaguar","target":"/Users/kejun/Desktop/repos/ex-brain/README.md"}
 {"ts":"2026-04-09T10:55:27.605Z","type":"edit","agent":"JadeJaguar","target":"/Users/kejun/Desktop/repos/ex-brain/README.md"}
+{"ts":"2026-04-09T10:56:22.320Z","type":"commit","agent":"JadeJaguar","preview":"docs: 根据近期功能变更更新文档 - CHANGELOG.md: 补充 LLM 客户端统一、错误处理、Query Sanitizer、 置信度阈值、--skip-index、smart-ingest、多层上下文等变更 - docs/ebrain-cli.md: 新增实体提取配置、智能编译、query --llm 多层 上下文、查询安全等章节；更新核心命令列表和环境变量 - README.md: 补充 extraction 配置示例和 smart-ingest 使用示例"}
+{"ts":"2026-04-09T10:57:33.245Z","type":"leave","agent":"JadeJaguar"}
+{"ts":"2026-04-09T10:58:06.231Z","type":"join","agent":"SwiftKnight"}
+{"ts":"2026-04-09T11:00:09.506Z","type":"leave","agent":"SwiftKnight"}
+{"ts":"2026-04-09T11:00:55.521Z","type":"join","agent":"EpicEagle"}
+{"ts":"2026-04-09T11:02:12.775Z","type":"leave","agent":"EpicEagle"}
+{"ts":"2026-04-09T11:03:47.134Z","type":"join","agent":"PureQuartz"}
+{"ts":"2026-04-09T11:03:50.104Z","type":"leave","agent":"PureQuartz"}
+{"ts":"2026-04-09T11:03:57.911Z","type":"join","agent":"GoldStorm"}
