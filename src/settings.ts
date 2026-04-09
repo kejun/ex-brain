@@ -45,6 +45,11 @@ const SettingsSchema = z.object({
     .optional(),
   embed: EmbedSchema.optional(),
   llm: LLMSchema.optional(),
+  extraction: z
+    .object({
+      confidenceThreshold: z.number().min(0).max(1).optional(),
+    })
+    .optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -56,6 +61,11 @@ export interface ResolvedSettings {
   remote: ResolvedRemoteDb | null;
   embed: ResolvedEmbed;
   llm: ResolvedLLM;
+  extraction: ResolvedExtraction;
+}
+
+export interface ResolvedExtraction {
+  confidenceThreshold: number;
 }
 
 export interface ResolvedRemoteDb {
@@ -111,6 +121,10 @@ const DEFAULT_LLM = {
   apiKeyEnv: "DASHSCOPE_API_KEY",
 };
 
+const DEFAULT_EXTRACTION = {
+  confidenceThreshold: 0.7,
+};
+
 // ---------------------------------------------------------------------------
 // Load & resolve
 // ---------------------------------------------------------------------------
@@ -140,6 +154,7 @@ export function resolveSettings(parsed: z.infer<typeof SettingsSchema>): Resolve
   const dbConf = parsed.db ?? {};
   const remoteConf = dbConf.remote ?? {};
   const embedConf = parsed.embed ?? {};
+  const extractionConf = parsed.extraction ?? {};
 
   // Remote: settings → env → defaults
   const host = remoteConf.host ?? process.env.EBRAIN_SEEKDB_HOST ?? "";
@@ -158,14 +173,14 @@ export function resolveSettings(parsed: z.infer<typeof SettingsSchema>): Resolve
       ),
       tenant: nonEmpty(remoteConf.tenant ?? process.env.EBRAIN_SEEKDB_TENANT, ""),
     };
-    return { dbPath: dbConf.path ?? DEFAULT_DB_PATH, remote, embed: resolveEmbed(embedConf), llm: resolveLLM(parsed.llm ?? {}) };
+    return { dbPath: dbConf.path ?? DEFAULT_DB_PATH, remote, embed: resolveEmbed(embedConf), llm: resolveLLM(parsed.llm ?? {}), extraction: resolveExtraction(extractionConf) };
   }
 
   // Local mode
   const dbPath = dbConf.path
     ? resolvePath(dbConf.path)
     : DEFAULT_DB_PATH;
-  return { dbPath, remote: null, embed: resolveEmbed(embedConf), llm: resolveLLM(parsed.llm ?? {}) };
+  return { dbPath, remote: null, embed: resolveEmbed(embedConf), llm: resolveLLM(parsed.llm ?? {}), extraction: resolveExtraction(extractionConf) };
 }
 
 function resolveEmbed(conf: z.infer<typeof EmbedSchema>): ResolvedEmbed {
@@ -187,6 +202,12 @@ function resolveLLM(conf: z.infer<typeof LLMSchema>): ResolvedLLM {
   const apiKey = nonEmpty(conf.apiKey, DEFAULT_LLM.apiKey);
   const apiKeyEnv = nonEmpty(conf.apiKeyEnv, DEFAULT_LLM.apiKeyEnv);
   return { baseURL, model, apiKey, apiKeyEnv };
+}
+
+function resolveExtraction(conf: { confidenceThreshold?: number }): ResolvedExtraction {
+  const threshold = conf.confidenceThreshold ?? process.env.EBRAIN_CONFIDENCE_THRESHOLD;
+  const value = typeof threshold === "number" ? threshold : (threshold ? parseFloat(threshold) : DEFAULT_EXTRACTION.confidenceThreshold);
+  return { confidenceThreshold: Math.max(0, Math.min(1, value)) };
 }
 
 // ---------------------------------------------------------------------------

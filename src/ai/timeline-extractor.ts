@@ -308,15 +308,19 @@ function normalizeDate(raw: string, defaultDate?: string): string {
   const chineseMatch = trimmed.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
   if (chineseMatch) {
     const [, year, month, day] = chineseMatch;
-    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+    if (year && month && day) {
+      return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+    }
   }
 
   // Chinese format without year: 1月15日
   const chineseNoYearMatch = trimmed.match(/(\d{1,2})月(\d{1,2})日/);
   if (chineseNoYearMatch && defaultDate) {
     const [, month, day] = chineseNoYearMatch;
-    const year = defaultDate.slice(0, 4);
-    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+    if (month && day) {
+      const year = defaultDate.slice(0, 4);
+      return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+    }
   }
 
   // English month names
@@ -338,10 +342,12 @@ function normalizeDate(raw: string, defaultDate?: string): string {
   const englishMatch = trimmed.match(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?/i);
   if (englishMatch) {
     const [, monthName, day, year] = englishMatch;
-    const month = monthMap[monthName.toLowerCase().slice(0, 3)];
-    if (month) {
-      const finalYear = year || (defaultDate ? defaultDate.slice(0, 4) : new Date().getFullYear().toString());
-      return `${finalYear}-${month}-${day.padStart(2, "0")}`;
+    if (monthName && day) {
+      const month = monthMap[monthName.toLowerCase().slice(0, 3)];
+      if (month) {
+        const finalYear = year || (defaultDate ? defaultDate.slice(0, 4) : new Date().getFullYear().toString());
+        return `${finalYear}-${month}-${day.padStart(2, "0")}`;
+      }
     }
   }
 

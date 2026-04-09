@@ -124,3 +124,38 @@
 {"ts":"2026-04-09T03:59:59.125Z","type":"edit","agent":"HappyDragon","target":"/Users/kejun/Desktop/repos/ex-brain/src/ai/entity-link.ts"}
 {"ts":"2026-04-09T04:00:00.152Z","type":"edit","agent":"GoldBear","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/index.ts"}
 {"ts":"2026-04-09T04:00:02.077Z","type":"edit","agent":"CalmJaguar","target":"/Users/kejun/Desktop/repos/ex-brain/src/repositories/brain-repo.ts"}
+{"ts":"2026-04-09T04:00:10.933Z","type":"commit","agent":"CalmJaguar","preview":"feat(db): add database error handling - Create src/db/errors.ts with DbError class, DbErrorCategory, and wrapDbError utility - Add connection error handling and retry logic to db/client.ts - Add try-catch blocks to all core operations in brain-repo.ts (getPage, putPage, listPages, stats, search, query, syncPageToSearch, syncPagesToSearch, embedAll, link, timeline, timelineAdd, timelineAddBatch, timelineGlobal, timelineDelete, timelineUpdate, tags, tag, untag, readRaw, writeRaw, backlinks, allSlugs, deletePage) - syncPageToSearch and syncPagesToSearch log warnings instead of throwing (best-effort) - Add connection state tracking (isConnected, lastConnectedAt) Task: task-3"}
+{"ts":"2026-04-09T04:00:13.412Z","type":"edit","agent":"HappyDragon","target":"/Users/kejun/Desktop/repos/ex-brain/src/ai/entity-link.ts"}
+{"ts":"2026-04-09T04:00:13.503Z","type":"release","agent":"CalmJaguar","target":"src/repositories/brain-repo.ts"}
+{"ts":"2026-04-09T04:00:13.503Z","type":"release","agent":"CalmJaguar","target":"src/db/client.ts"}
+{"ts":"2026-04-09T04:00:20.100Z","type":"task.done","agent":"CalmJaguar","target":"task-3","preview":"添加数据库操作错误处理 实现了: 1. 创建 src/db/errors.ts - 统一的数据库错误类型 (DbError, DbErrorCategory, wrapDbError) 2. 更新 src/db/client.ts - 添加连接错误处理、重试逻辑、连接状态跟踪 3. 更新 src/repositories/brain-repo.ts - 为所有核心操作添加 try-catch 错误处理 - getPage, putPage, listPages, stats, search, query - syncPageToSearch, syncPagesToSearch, embedAll - link, timeline, timelineAdd, timelineAddBatch, timelineGlobal, timelineDelete, timelineUpdate - tags, tag, untag, readRaw, writeRaw - backlinks, allSlugs, deletePage 验收标准达成: - 数据库操作失败不会崩溃 (抛出 DbError) - 错误信息清晰可调试 (包含 operation, category, context) - sync 操作失败时记录警告而非抛出异常"}
+{"ts":"2026-04-09T04:00:23.398Z","type":"message","agent":"CalmJaguar","preview":"Completed task-3: 添加数据库操作错误处理 - Created src/db/errors.ts with DbError class, added try-catch to all brain-repo.ts operations"}
+{"ts":"2026-04-09T04:00:49.555Z","type":"leave","agent":"CalmJaguar"}
+{"ts":"2026-04-09T04:01:34.700Z","type":"test","agent":"GoldBear","preview":"failed"}
+{"ts":"2026-04-09T04:02:04.605Z","type":"edit","agent":"GoldBear","target":"/Users/kejun/Desktop/repos/ex-brain/src/db/client.ts"}
+{"ts":"2026-04-09T04:02:10.176Z","type":"edit","agent":"GoldBear","target":"/Users/kejun/Desktop/repos/ex-brain/src/db/client.ts"}
+{"ts":"2026-04-09T04:03:07.937Z","type":"test","agent":"GoldBear","preview":"failed"}
+{"ts":"2026-04-09T04:03:26.733Z","type":"test","agent":"HappyDragon","preview":"passed"}
+{"ts":"2026-04-09T04:03:52.141Z","type":"test","agent":"GoldBear","preview":"failed"}
+{"ts":"2026-04-09T04:03:55.867Z","type":"test","agent":"GoldBear","preview":"passed"}
+{"ts":"2026-04-09T04:03:59.098Z","type":"test","agent":"GoldBear","preview":"passed"}
+{"ts":"2026-04-09T04:05:02.223Z","type":"edit","agent":"GoldBear","target":"/Users/kejun/Desktop/repos/ex-brain/CHANGELOG.md"}
+{"ts":"2026-04-09T04:05:23.100Z","type":"commit","agent":"GoldBear","preview":"fix: redirect DB logs to stderr and add CHANGELOG - Change console.log to console.error in db/client.ts to avoid polluting JSON output in CLI - Add CHANGELOG.md for tracking project changes - Verified: core CLI commands (put, search, list) work correctly"}
+{"ts":"2026-04-09T04:05:42.586Z","type":"task.done","agent":"GoldBear","target":"task-7","preview":"完成了综合验证与文档更新：修复了 DbErrorCategory/EntityType 类型导入、db/client.ts 日志重定向。验证：133 单元测试通过，核心功能手动验证通过，创建 CHANGELOG.md"}
+{"ts":"2026-04-09T04:05:48.313Z","type":"message","agent":"GoldBear","preview":"Completed task-7: 综合验证与文档更新 - Fixed DbErrorCategory/EntityType imports, redirected DB logs to stderr, created CHANGELOG.md, verified 133 unit tests pass"}
+{"ts":"2026-04-09T04:05:54.402Z","type":"leave","agent":"GoldBear"}
+{"ts":"2026-04-09T04:06:48.730Z","type":"test","agent":"HappyDragon","preview":"passed"}
+{"ts":"2026-04-09T04:22:32.399Z","type":"stuck","agent":"HappyDragon"}
+{"ts":"2026-04-09T04:23:56.994Z","type":"edit","agent":"HappyDragon","target":"/Users/kejun/Desktop/repos/ex-brain/src/ai/entity-link.ts"}
+{"ts":"2026-04-09T04:24:04.847Z","type":"edit","agent":"HappyDragon","target":"/Users/kejun/Desktop/repos/ex-brain/src/ai/entity-link.ts"}
+{"ts":"2026-04-09T04:24:16.229Z","type":"edit","agent":"HappyDragon","target":"/Users/kejun/Desktop/repos/ex-brain/src/ai/entity-link.ts"}
+{"ts":"2026-04-09T04:24:35.775Z","type":"edit","agent":"HappyDragon","target":"/Users/kejun/Desktop/repos/ex-brain/src/ai/timeline-extractor.ts"}
+{"ts":"2026-04-09T04:24:55.658Z","type":"edit","agent":"HappyDragon","target":"/Users/kejun/Desktop/repos/ex-brain/src/ai/timeline-extractor.ts"}
+{"ts":"2026-04-09T04:28:14.131Z","type":"test","agent":"HappyDragon","preview":"passed"}
+{"ts":"2026-04-09T04:28:53.166Z","type":"edit","agent":"HappyDragon","target":"/Users/kejun/Desktop/repos/ex-brain/src/settings.ts"}
+{"ts":"2026-04-09T04:28:58.546Z","type":"edit","agent":"HappyDragon","target":"/Users/kejun/Desktop/repos/ex-brain/src/settings.ts"}
+{"ts":"2026-04-09T04:29:06.582Z","type":"edit","agent":"HappyDragon","target":"/Users/kejun/Desktop/repos/ex-brain/src/settings.ts"}
+{"ts":"2026-04-09T04:29:25.901Z","type":"edit","agent":"HappyDragon","target":"/Users/kejun/Desktop/repos/ex-brain/src/settings.ts"}
+{"ts":"2026-04-09T04:29:37.212Z","type":"edit","agent":"HappyDragon","target":"/Users/kejun/Desktop/repos/ex-brain/src/settings.ts"}
+{"ts":"2026-04-09T04:33:20.663Z","type":"test","agent":"HappyDragon","preview":"passed"}
+{"ts":"2026-04-09T04:33:41.506Z","type":"test","agent":"HappyDragon","preview":"passed"}

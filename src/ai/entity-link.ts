@@ -142,16 +142,14 @@ export async function extractRelations(
       });
     }
 
-    return relations;
+    // Filter by confidence threshold (default 0.7)
+    const threshold = options?.confidenceThreshold ?? 0.7;
+    return relations.filter((r) => r.confidence >= threshold);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     console.warn(`[ebrain] Entity extraction error: ${msg}`);
     return [];
   }
-
-  // Filter by confidence threshold (default 0.7)
-  const threshold = options?.confidenceThreshold ?? 0.7;
-  return relations.filter((r) => r.confidence >= threshold);
 }
 
 function parseEntityRef(val: unknown): EntityRef | null {
