@@ -96,7 +96,7 @@ export class BrainDb {
       await this.client.execute("SELECT 1");
       this._isConnected = true;
       this._lastConnectedAt = new Date();
-      console.log("[DB] Reconnected successfully");
+      console.error("[DB] Reconnected successfully");
     } catch {
       // Connection still failed, will retry on next operation
       this._isConnected = false;
@@ -130,7 +130,7 @@ export class BrainDb {
       const db = new BrainDb(dbPath, client, pagesCollection);
       db._isConnected = true;
       db._lastConnectedAt = new Date();
-      console.log("[DB] Connected successfully");
+      console.error("[DB] Connected successfully");
       return db;
     } catch (error) {
       const wrappedError = wrapDbError(error, "connect");
@@ -197,7 +197,7 @@ export class BrainDb {
     try {
       await this.client.close();
       this._isConnected = false;
-      console.log("[DB] Disconnected");
+      console.error("[DB] Disconnected");
     } catch (error) {
       const wrappedError = wrapDbError(error, "close");
       console.error("[DB] Error closing connection:", wrappedError.message);
