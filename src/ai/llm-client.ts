@@ -166,7 +166,7 @@ export async function callLLM(
         continue;
       }
 
-      const data = await response.json();
+      const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
       return data.choices?.[0]?.message?.content?.trim() ?? "";
       
     } catch (error) {
@@ -212,7 +212,7 @@ function classifyError(status: number, responseText: string, statusText: string)
     case 429:
       // Try to extract retry-after from response
       const retryAfterMatch = responseText.match(/retry[- ]?after["']?\s*[:=]\s*(\d+)/i);
-      const retryAfter = retryAfterMatch ? parseInt(retryAfterMatch[1], 10) : undefined;
+      const retryAfter = retryAfterMatch?.[1] ? parseInt(retryAfterMatch[1], 10) : undefined;
       return new RateLimitError(`Rate limited: ${statusText} - ${truncatedText}`, retryAfter);
     
     case 408:

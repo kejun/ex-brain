@@ -1,5 +1,5 @@
-import { ResolvedLLM } from "../settings";
-import { callLLM, resolveApiKey } from "./llm-client";
+import type { ResolvedLLM } from "../settings";
+import { callLLM, resolveApiKey, isLLMConfigured } from "./llm-client";
 
 // ---------------------------------------------------------------------------
 // Types

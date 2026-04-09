@@ -61,3 +61,18 @@
 {"ts":"2026-04-09T03:54:34.225Z","type":"message","agent":"DarkKnight","preview":"Completed task-2: 重构 AI 模块使用统一客户端。compiler.ts, timeline-extractor.ts, entity-link.ts 已改用 llm-client，减少 ~162 行代码，测试通过。"}
 {"ts":"2026-04-09T03:54:40.273Z","type":"edit","agent":"CalmJaguar","target":"/Users/kejun/Desktop/repos/ex-brain/src/repositories/brain-repo.ts"}
 {"ts":"2026-04-09T03:54:41.499Z","type":"edit","agent":"SwiftXenon","target":"/Users/kejun/Desktop/repos/ex-brain/src/ai/entity-link.ts"}
+{"ts":"2026-04-09T03:54:44.489Z","type":"leave","agent":"DarkKnight"}
+{"ts":"2026-04-09T03:54:45.030Z","type":"test","agent":"GoldBear","preview":"failed"}
+{"ts":"2026-04-09T03:54:46.393Z","type":"leave","agent":"LoudMoon"}
+{"ts":"2026-04-09T03:54:46.419Z","type":"leave","agent":"LoudMoon","preview":"Lobby worker exited (code 0)"}
+{"ts":"2026-04-09T03:54:51.473Z","type":"edit","agent":"JadeCastle","target":"/Users/kejun/Desktop/repos/ex-brain/src/mcp/server.ts"}
+{"ts":"2026-04-09T03:54:51.585Z","type":"edit","agent":"CalmJaguar","target":"/Users/kejun/Desktop/repos/ex-brain/src/repositories/brain-repo.ts"}
+{"ts":"2026-04-09T03:54:53.453Z","type":"commit","agent":"KeenKnight","preview":"perf(brain-repo): add error handling to batch sync operations - Add try-catch to syncPagesToSearch with graceful error handling - wrapDbError provides structured error info - Log errors but don"}
+{"ts":"2026-04-09T03:54:58.035Z","type":"edit","agent":"CalmJaguar","target":"/Users/kejun/Desktop/repos/ex-brain/src/repositories/brain-repo.ts"}
+{"ts":"2026-04-09T03:55:01.446Z","type":"release","agent":"KeenKnight","target":"src/repositories/brain-repo.ts"}
+{"ts":"2026-04-09T03:55:01.446Z","type":"release","agent":"KeenKnight","target":"src/commands/index.ts"}
+{"ts":"2026-04-09T03:55:04.944Z","type":"task.done","agent":"KeenKnight","target":"task-5","preview":"性能优化 - 批量操作：embedAll 改用 syncPagesToSearch 批量处理、timelineAddBatch 使用多行 INSERT、import 使用 skipEmbed 延迟索引 + 批量 sync"}
+{"ts":"2026-04-09T03:55:08.272Z","type":"message","agent":"KeenKnight","preview":"Completed task-5: 性能优化 - 批量操作 - embedAll/syncPagesToSearch 批量处理、timelineAddBatch 多行 INSERT、import skipEmbed + 批量 sync"}
+{"ts":"2026-04-09T03:55:10.495Z","type":"edit","agent":"CalmJaguar","target":"/Users/kejun/Desktop/repos/ex-brain/src/repositories/brain-repo.ts"}
+{"ts":"2026-04-09T03:55:14.768Z","type":"edit","agent":"SwiftXenon","target":"/Users/kejun/Desktop/repos/ex-brain/src/ai/llm-client.ts"}
+{"ts":"2026-04-09T03:55:14.948Z","type":"leave","agent":"KeenKnight"}

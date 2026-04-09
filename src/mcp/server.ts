@@ -654,23 +654,39 @@ export async function startMcpServer(dbPath: string): Promise<void> {
   // Resources
   // ---------------------------------------------------------------------------
 
+  const brainIndexHandler = async () => {
+    const slugs = await repo.allSlugs();
+    return {
+      contents: [
+        {
+          uri: "brain://index",
+          mimeType: "text/plain",
+          text: slugs.join("\n"),
+        },
+      ],
+    };
+  };
+
   server.registerResource(
     "brain-index",
     "brain://index",
     { title: "Brain Index", description: "All page slugs grouped in plain list." },
-    async () => {
-      const slugs = await repo.allSlugs();
-      return {
-        contents: [
-          {
-            uri: "brain://index",
-            mimeType: "text/plain",
-            text: slugs.join("\n"),
-          },
-        ],
-      };
-    },
+    withResourceErrorHandling("brain-index", brainIndexHandler),
   );
+
+  const brainPageHandler = async (uri: URL, vars: { slug?: string }) => {
+    const slug = String(vars.slug ?? "");
+    const page = await repo.getPage(slug);
+    return {
+      contents: [
+        {
+          uri: uri.href,
+          mimeType: "application/json",
+          text: JSON.stringify(page, null, 2),
+        },
+      ],
+    };
+  };
 
   const pageTemplate = new ResourceTemplate("brain://pages/{slug}", {
     list: undefined,
@@ -679,19 +695,7 @@ export async function startMcpServer(dbPath: string): Promise<void> {
     "brain-page",
     pageTemplate,
     { title: "Brain Page", description: "Single page JSON resource." },
-    async (uri, vars) => {
-      const slug = String(vars.slug ?? "");
-      const page = await repo.getPage(slug);
-      return {
-        contents: [
-          {
-            uri: uri.href,
-            mimeType: "application/json",
-            text: JSON.stringify(page, null, 2),
-          },
-        ],
-      };
-    },
+    withResourceErrorHandling("brain-page", brainPageHandler),
   );
 
   const transport = new StdioServerTransport();

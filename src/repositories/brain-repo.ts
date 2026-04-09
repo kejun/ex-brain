@@ -354,63 +354,87 @@ export class BrainRepository {
   }
 
   async embedAll(): Promise<number> {
-    const pages = await this.listPages({ limit: 100000 });
-    if (pages.length === 0) return 0;
-    // Use batch sync for significant performance improvement
-    await this.syncPagesToSearch(pages.map(p => p.slug));
-    return pages.length;
+    try {
+      const pages = await this.listPages({ limit: 100000 });
+      if (pages.length === 0) return 0;
+      // Use batch sync for significant performance improvement
+      await this.syncPagesToSearch(pages.map(p => p.slug));
+      return pages.length;
+    } catch (error) {
+      const dbError = wrapDbError(error, "embedAll");
+      logDbError(dbError);
+      throw dbError;
+    }
   }
 
   async link(fromSlug: string, toSlug: string, context: string): Promise<void> {
-    await this.db.client.execute(
-      `INSERT INTO links (from_slug, to_slug, context, created_at)
-       VALUES (?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE context = VALUES(context)`,
-      [fromSlug, toSlug, context, nowIso()],
-    );
+    try {
+      await this.db.client.execute(
+        `INSERT INTO links (from_slug, to_slug, context, created_at)
+         VALUES (?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE context = VALUES(context)`,
+        [fromSlug, toSlug, context, nowIso()],
+      );
+    } catch (error) {
+      const dbError = wrapDbError(error, "link", { fromSlug, toSlug });
+      logDbError(dbError);
+      throw dbError;
+    }
   }
 
   async timeline(slug: string, limit = 50): Promise<TimelineEntry[]> {
-    const rows = many<{
-      id: number;
-      page_slug: string;
-      date: string;
-      source: string;
-      summary: string;
-      detail: string;
-    }>(
-      await this.db.client.execute(
-        `SELECT id, page_slug, date, source, summary, detail
-         FROM timeline_entries
-         WHERE page_slug = ?
-         ORDER BY date DESC, id DESC
-         LIMIT ?`,
-        [slug, limit],
-      ),
-    );
-    return rows.map((row) => ({
-      id: row.id,
-      pageSlug: row.page_slug,
-      date: row.date,
-      source: row.source,
-      summary: row.summary,
-      detail: row.detail,
-    }));
+    try {
+      const rows = many<{
+        id: number;
+        page_slug: string;
+        date: string;
+        source: string;
+        summary: string;
+        detail: string;
+      }>(
+        await this.db.client.execute(
+          `SELECT id, page_slug, date, source, summary, detail
+           FROM timeline_entries
+           WHERE page_slug = ?
+           ORDER BY date DESC, id DESC
+           LIMIT ?`,
+          [slug, limit],
+        ),
+      );
+      return rows.map((row) => ({
+        id: row.id,
+        pageSlug: row.page_slug,
+        date: row.date,
+        source: row.source,
+        summary: row.summary,
+        detail: row.detail,
+      }));
+    } catch (error) {
+      const dbError = wrapDbError(error, "timeline", { slug, limit });
+      logDbError(dbError);
+      throw dbError;
+    }
   }
 
   async timelineAdd(entry: TimelineEntry): Promise<void> {
-    await this.db.client.execute(
-      `INSERT INTO timeline_entries (page_slug, date, source, summary, detail, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [
-        entry.pageSlug,
-        entry.date,
-        entry.source,
-        entry.summary,
-        entry.detail,
-        nowIso(),
-      ],
-    );
+    try {
+      await this.db.client.execute(
+        `INSERT INTO timeline_entries (page_slug, date, source, summary, detail, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          entry.pageSlug,
+          entry.date,
+          entry.source,
+          entry.summary,
+          entry.detail,
+          nowIso(),
+        ],
+      );
+    } catch (error) {
+      const dbError = wrapDbError(error, "timelineAdd", { pageSlug: entry.pageSlug });
+      logDbError(dbError);
+      throw dbError;
+    }
   }
 
   /**
