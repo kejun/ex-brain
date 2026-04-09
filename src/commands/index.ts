@@ -24,6 +24,19 @@ import { extractRelations, entityToSlug, type EntityType } from "../ai/entity-li
 import { registerCompileCommands } from "./compile-cmd";
 import { registerGraphCommand } from "./graph-cmd";
 import { createProgress, formatDuration } from "../utils/progress";
+import {
+  success,
+  error as cliError,
+  warning,
+  info,
+  step,
+  subItem,
+  keyValue,
+  header,
+  createSpinner,
+  formatCount,
+  type ProgressSpinner,
+} from "../utils/cli-output";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -59,32 +72,46 @@ async function applyEntityLinks(
   const settings = await loadSettings();
   if (!settings.llm.baseURL) {
     if (!json) {
-      process.stderr.write(`[entity-link] LLM not configured, skipping for ${sourceSlug}\n`);
+      warning(`LLM not configured, skipping entity extraction for ${sourceSlug}`);
     }
     return { created: 0, linked: 0 };
   }
 
-  const progress = createProgress();
+  const spinner = createSpinner();
   if (!json) {
-    progress.start(`Extracting entities from ${sourceSlug}`);
+    spinner.start(`Extracting entities from ${sourceSlug}...`);
   }
 
   const startTime = Date.now();
-  const relations = await extractRelations(content, settings.llm);
+  let relations;
+  try {
+    relations = await extractRelations(content, settings.llm);
+  } catch (err) {
+    if (!json) {
+      spinner.fail(`Entity extraction failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    return { created: 0, linked: 0 };
+  }
   
   // Filter by confidence
-  const highConfidence = relations.filter((r) => r.confidence >= 0.6);
+  const confidenceThreshold = settings.extraction.confidenceThreshold;
+  const highConfidence = relations.filter((r) => r.confidence >= confidenceThreshold);
   const ignoredCount = relations.length - highConfidence.length;
   
   if (highConfidence.length === 0) {
     if (!json) {
-      progress.fail(`No high-confidence entities found`);
+      if (relations.length > 0) {
+        spinner.warn(`Found ${relations.length} entities but all below confidence threshold (${confidenceThreshold})`);
+      } else {
+        spinner.warn(`No entities found in content`);
+      }
     }
     return { created: 0, linked: 0 };
   }
 
   let created = 0;
   let linked = 0;
+  const details: string[] = [];
 
   for (const r of highConfidence) {
     // 1. Resolve entity slugs (disambiguation)
@@ -97,8 +124,8 @@ async function applyEntityLinks(
     // 2. Ensure entity pages exist
     const c1 = await repo.ensureEntityPage(fromSlug, r.from.type, r.from.name, r.relation, r.context, sourceSlug);
     const c2 = await repo.ensureEntityPage(toSlug, r.to.type, r.to.name, r.relation, r.context, sourceSlug);
-    if (c1) created += 1;
-    if (c2) created += 1;
+    if (c1) { created += 1; details.push(`Created: ${r.from.name} (${r.from.type})`); }
+    if (c2) { created += 1; details.push(`Created: ${r.to.name} (${r.to.type})`); }
 
     // 3. Link between entities (context includes relation type)
     await repo.link(fromSlug, toSlug, `[${r.relation}] ${r.context}`);
@@ -113,8 +140,16 @@ async function applyEntityLinks(
 
   if (!json) {
     const duration = formatDuration(Date.now() - startTime);
-    const entityNames = highConfidence.flatMap((r) => [r.from.name, r.to.name]);
-    progress.succeed(`${[...new Set(entityNames)].join(", ")} (${created} created, ${linked} links, ${duration})`);
+    const entityNames = [...new Set(highConfidence.flatMap((r) => [r.from.name, r.to.name]))];
+    spinner.succeed(`Extracted ${entityNames.length} entities: ${entityNames.join(", ")}`);
+    
+    // Print detailed info
+    subItem(`${created} entity pages created`);
+    subItem(`${linked} links added`);
+    if (ignoredCount > 0) {
+      subItem(`${ignoredCount} low-confidence relations ignored`);
+    }
+    subItem(`Completed in ${duration}`);
   }
 
   return { created, linked };
@@ -267,6 +302,15 @@ Examples:
       }
 
       await withRepo(program, async (repo) => {
+        const jsonOut = isJson(program);
+        const spinner = createSpinner();
+        const startTime = Date.now();
+        
+        if (!jsonOut) {
+          header(`Put: ${finalSlug}`);
+          spinner.start(`Creating/updating page...`);
+        }
+        
         const page = await repo.putPage({
           slug: finalSlug,
           type,
@@ -275,12 +319,26 @@ Examples:
           timeline: parsed.timeline,
           frontmatter: parsed.frontmatter,
         });
+        
+        if (!jsonOut) {
+          spinner.succeed(`Page saved: ${page.slug}`);
+          keyValue("Title", title);
+          keyValue("Type", type);
+          keyValue("Content length", `${parsed.compiledTruth.length} chars`);
+        }
+        
         await applyEntityLinks(
           repo,
           finalSlug,
           parsed.compiledTruth,
-          isJson(program),
+          jsonOut,
         );
+        
+        if (!jsonOut) {
+          const duration = formatDuration(Date.now() - startTime);
+          success(`Operation completed in ${duration}`);
+        }
+        
         print(program, { ok: true, slug: page.slug, updatedAt: page.updatedAt });
       });
     },
@@ -350,7 +408,20 @@ Examples:
       return;
     }
     await withRepo(program, async (repo) => {
+      const jsonOut = isJson(program);
+      const spinner = createSpinner();
+      
+      if (!jsonOut) {
+        header(`Delete: ${slug}`);
+        spinner.start(`Deleting page and related data...`);
+      }
+      
       await repo.deletePage(slug);
+      
+      if (!jsonOut) {
+        spinner.succeed(`Page deleted: ${slug}`);
+      }
+      
       print(program, { ok: true, action: "delete", slug });
     });
   });
@@ -899,6 +970,7 @@ Examples:
     await withRepo(program, async (repo) => {
       const root = resolve(dir);
       const files = await collectMarkdownFiles(root);
+      
       if (isDryRun(opts)) {
         print(program, {
           dryRun: true,
@@ -912,11 +984,18 @@ Examples:
 
       const jsonOut = isJson(program);
       const settings = await loadSettings();
-      const progress = createProgress();
+      const spinner = createSpinner();
       const startTime = Date.now();
       
+      if (!jsonOut) {
+        header(`Import: ${root}`);
+      }
+      
       // Phase 1: Parse all files and collect data
-      progress.start(`Scanning ${files.length} files...`);
+      if (!jsonOut) {
+        spinner.start(`Scanning ${files.length} files...`);
+      }
+      
       const fileData: Array<{
         file: string;
         slug: string;
@@ -940,36 +1019,64 @@ Examples:
         fileData.push({ file, slug, parsed, content, wikiLinks, timelineEntries, tags });
       }
       
+      if (!jsonOut) {
+        spinner.succeed(`Found ${files.length} markdown files`);
+      }
+      
       // Phase 2: Write all pages first (skip embed for performance)
-      // We'll batch sync all pages at the end
-      progress.update(`Writing ${fileData.length} pages...`);
+      if (!jsonOut) {
+        spinner.start(`Writing ${fileData.length} pages to database...`);
+      }
+      
       const allSlugs: string[] = [];
+      const writeErrors: string[] = [];
+      
       for (let i = 0; i < fileData.length; i++) {
         const { slug, parsed } = fileData[i]!;
-        if (!jsonOut && i % 10 === 0) {
-          progress.update(`Writing pages... ${i + 1}/${fileData.length}`);
+        if (!jsonOut && i % 20 === 0) {
+          spinner.update(`Writing pages... ${i + 1}/${fileData.length}`);
         }
-        await repo.putPage({
-          slug,
-          type: String(parsed.frontmatter.type ?? inferTypeFromSlug(slug)),
-          title: String(parsed.frontmatter.title ?? slugToTitle(slug)),
-          compiledTruth: parsed.compiledTruth,
-          timeline: parsed.timeline,
-          frontmatter: parsed.frontmatter,
-        }, true); // skipEmbed: true for performance
-        allSlugs.push(slug);
+        try {
+          await repo.putPage({
+            slug,
+            type: String(parsed.frontmatter.type ?? inferTypeFromSlug(slug)),
+            title: String(parsed.frontmatter.title ?? slugToTitle(slug)),
+            compiledTruth: parsed.compiledTruth,
+            timeline: parsed.timeline,
+            frontmatter: parsed.frontmatter,
+          }, true); // skipEmbed: true for performance
+          allSlugs.push(slug);
+        } catch (err) {
+          writeErrors.push(`${slug}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+      
+      if (!jsonOut) {
+        spinner.succeed(`Wrote ${allSlugs.length} pages to database`);
+        if (writeErrors.length > 0) {
+          warning(`${writeErrors.length} pages failed to write`);
+          for (const e of writeErrors.slice(0, 3)) {
+            subItem(e);
+          }
+          if (writeErrors.length > 3) {
+            subItem(`... and ${writeErrors.length - 3} more`);
+          }
+        }
       }
       
       // Phase 3: Parallel entity extraction (main optimization)
-      progress.update("Extracting entities...");
       const BATCH_SIZE = 10;
       const entityResults = new Map<string, Awaited<ReturnType<typeof extractRelations>>>();
       
       if (settings.llm.baseURL) {
+        if (!jsonOut) {
+          spinner.start(`Extracting entities with LLM...`);
+        }
+        
         for (let i = 0; i < fileData.length; i += BATCH_SIZE) {
           const batch = fileData.slice(i, i + BATCH_SIZE).filter(d => d.tags.length === 0);
           if (!jsonOut) {
-            progress.update(`Extracting entities... ${Math.min(i + BATCH_SIZE, fileData.length)}/${fileData.length}`);
+            spinner.update(`Extracting entities... ${Math.min(i + BATCH_SIZE, fileData.length)}/${fileData.length}`);
           }
           const batchPromises = batch.map(async ({ slug, content }) => {
             const relations = await extractRelations(content, settings.llm);
@@ -980,13 +1087,25 @@ Examples:
             entityResults.set(slug, relations);
           }
         }
+        
+        if (!jsonOut) {
+          spinner.succeed(`Entity extraction complete`);
+        }
+      } else {
+        if (!jsonOut) {
+          warning(`LLM not configured, skipping entity extraction`);
+        }
       }
       
       // Phase 4: Write links, tags, timeline, and entity pages
-      progress.update("Creating links and timeline...");
+      if (!jsonOut) {
+        spinner.start(`Creating links, tags, and timeline entries...`);
+      }
+      
       let linkCount = 0;
       let timelineCount = 0;
       let entityCount = 0;
+      let tagCount = 0;
       
       // Collect timeline entries for batch insert
       const allTimelineEntries: Array<{
@@ -1019,6 +1138,7 @@ Examples:
         // Tags
         for (const tag of tags) {
           await repo.tag(slug, tag);
+          tagCount++;
         }
         
         // Entity links from parallel extraction
@@ -1049,16 +1169,40 @@ Examples:
         await repo.timelineAddBatch(allTimelineEntries);
       }
       
-      // Batch sync all pages to search index
-      progress.update(`Indexing ${allSlugs.length} pages...`);
+      if (!jsonOut) {
+        spinner.succeed(`Created links, tags, and timeline`);
+      }
+      
+      // Phase 5: Batch sync all pages to search index
+      if (!jsonOut) {
+        spinner.start(`Indexing ${allSlugs.length} pages for search...`);
+      }
       await repo.embedAll();
       
       const duration = formatDuration(Date.now() - startTime);
-      progress.succeed(`${files.length} files imported, ${entityCount} entities, ${linkCount} links (${duration})`);
+      
+      if (!jsonOut) {
+        spinner.succeed(`Search indexing complete`);
+        
+        // Print summary
+        header("Import Summary");
+        keyValue("Files imported", String(files.length));
+        keyValue("Pages created", String(allSlugs.length));
+        keyValue("Entities extracted", String(entityCount));
+        keyValue("Links created", String(linkCount));
+        keyValue("Timeline entries", String(timelineCount));
+        keyValue("Tags added", String(tagCount));
+        keyValue("Duration", duration);
+        
+        if (writeErrors.length > 0) {
+          warning(`${writeErrors.length} pages had errors`);
+        }
+      }
       
       print(program, {
+        ok: true,
         importedFiles: files.length,
-        pages: fileData.length,
+        pages: allSlugs.length,
         links: linkCount,
         timelineEntries: timelineCount,
         entities: entityCount,
@@ -1159,6 +1303,15 @@ Examples:
       }
 
       await withRepo(program, async (repo) => {
+        const jsonOut = isJson(program);
+        const spinner = createSpinner();
+        const startTime = Date.now();
+        
+        if (!jsonOut) {
+          header(`Ingest: ${fileName}`);
+          spinner.start(`Creating page from file...`);
+        }
+        
         await repo.putPage({
           slug,
           type,
@@ -1170,6 +1323,14 @@ Examples:
             sourceType: type,
           },
         });
+        
+        if (!jsonOut) {
+          spinner.succeed(`Page created: ${slug}`);
+          keyValue("Source file", fileName);
+          keyValue("Type", type);
+          keyValue("Content length", `${content.length} chars`);
+        }
+        
         await repo.timelineAdd({
           pageSlug: slug,
           date: new Date().toISOString().slice(0, 10),
@@ -1177,12 +1338,19 @@ Examples:
           summary: `Ingested file ${fileName}`,
           detail: "",
         });
+        
         await applyEntityLinks(
           repo,
           slug,
           content,
-          isJson(program),
+          jsonOut,
         );
+        
+        if (!jsonOut) {
+          const duration = formatDuration(Date.now() - startTime);
+          success(`Ingestion completed in ${duration}`);
+        }
+        
         print(program, { ok: true, action: "ingest", slug });
       });
     },
@@ -1225,13 +1393,28 @@ Examples:
         }
         await withRepo(program, async (repo) => {
           const jsonOut = isJson(program);
-          const pages = await repo.listPages({ limit: 100000 });
-          let count = 0;
-          for (const page of pages) {
-            count += 1;
-            progress("embed " + page.slug, count, pages.length, jsonOut);
-            await repo.syncPageToSearch(page.slug);
+          const spinner = createSpinner();
+          const startTime = Date.now();
+          
+          if (!jsonOut) {
+            header("Embed All Pages");
+            spinner.start(`Loading pages...`);
           }
+          
+          const pages = await repo.listPages({ limit: 100000 });
+          
+          if (!jsonOut) {
+            spinner.update(`Embedding ${pages.length} pages...`);
+          }
+          
+          const count = await repo.embedAll();
+          
+          if (!jsonOut) {
+            const duration = formatDuration(Date.now() - startTime);
+            spinner.succeed(`Embedded ${count} pages`);
+            keyValue("Duration", duration);
+          }
+          
           print(program, { embedded: count, mode: "all" });
         });
         return;
@@ -1244,7 +1427,20 @@ Examples:
         return;
       }
       await withRepo(program, async (repo) => {
+        const jsonOut = isJson(program);
+        const spinner = createSpinner();
+        
+        if (!jsonOut) {
+          header(`Embed: ${slug}`);
+          spinner.start(`Generating embedding for page...`);
+        }
+        
         await repo.syncPageToSearch(slug);
+        
+        if (!jsonOut) {
+          spinner.succeed(`Page embedded: ${slug}`);
+        }
+        
         print(program, { embedded: 1, slug });
       });
     },
@@ -1264,10 +1460,15 @@ Examples:
     )
     .action(async () => {
       await withRepo(program, async () => {
+        const settings = await loadSettings();
+        const dbPath = program.opts().db ?? settings.dbPath;
+        
+        success(`Database initialized`);
+        keyValue("Path", dbPath);
+        
         print(program, {
           ok: true,
-          dbPath:
-            program.opts().db ?? (await loadSettings()).dbPath,
+          dbPath,
         });
       });
     });
@@ -1285,7 +1486,19 @@ Examples:
     )
     .action(async () => {
       await withRepo(program, async (repo) => {
-        print(program, await repo.stats());
+        const jsonOut = isJson(program);
+        const stats = await repo.stats();
+        
+        if (!jsonOut) {
+          header("Knowledge Base Statistics");
+          keyValue("Pages", String(stats.pages));
+          keyValue("Links", String(stats.links));
+          keyValue("Tags", String(stats.tags));
+          keyValue("Timeline entries", String(stats.timelineEntries));
+          keyValue("Raw data rows", String(stats.rawRows));
+        }
+        
+        print(program, stats);
       });
     });
 

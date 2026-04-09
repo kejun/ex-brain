@@ -159,3 +159,23 @@
 {"ts":"2026-04-09T04:29:37.212Z","type":"edit","agent":"HappyDragon","target":"/Users/kejun/Desktop/repos/ex-brain/src/settings.ts"}
 {"ts":"2026-04-09T04:33:20.663Z","type":"test","agent":"HappyDragon","preview":"passed"}
 {"ts":"2026-04-09T04:33:41.506Z","type":"test","agent":"HappyDragon","preview":"passed"}
+{"ts":"2026-04-09T04:33:51.248Z","type":"commit","agent":"HappyDragon","preview":"feat: 功能修复 - changeType 映射、置信度阈值、日期解析、importance 字段 Task: task-6 功能修复: - 修复 changeType 映射丢失问题 (compiler.ts): 更新 LLM prompt 包含"}
+{"ts":"2026-04-09T04:33:59.854Z","type":"task.done","agent":"HappyDragon","target":"task-6","preview":"完成了功能修复任务：修复 changeType 映射、添加置信度阈值过滤、扩展日期解析格式、持久化 importance 字段"}
+{"ts":"2026-04-09T04:34:03.152Z","type":"release","agent":"HappyDragon","target":"src/ai/compiler.ts"}
+{"ts":"2026-04-09T04:34:03.152Z","type":"release","agent":"HappyDragon","target":"src/ai/timeline-extractor.ts"}
+{"ts":"2026-04-09T04:34:03.152Z","type":"release","agent":"HappyDragon","target":"src/types/index.ts"}
+{"ts":"2026-04-09T04:34:03.152Z","type":"release","agent":"HappyDragon","target":"src/db/schema.ts"}
+{"ts":"2026-04-09T04:34:03.152Z","type":"release","agent":"HappyDragon","target":"src/settings.ts"}
+{"ts":"2026-04-09T04:34:03.152Z","type":"release","agent":"HappyDragon","target":"src/repositories/brain-repo.ts"}
+{"ts":"2026-04-09T04:34:06.950Z","type":"message","agent":"HappyDragon","preview":"Completed task-6: 功能修复 - 修复了 changeType 映射、添加置信度阈值过滤(默认0.7)、扩展日期解析格式(支持斜杠/季度/相对日期)、持久化 importance 字段"}
+{"ts":"2026-04-09T04:34:16.253Z","type":"leave","agent":"HappyDragon"}
+{"ts":"2026-04-09T04:34:53.705Z","type":"test","agent":"SageGrove","preview":"passed"}
+{"ts":"2026-04-09T05:06:03.717Z","type":"edit","agent":"SageGrove","target":"/Users/kejun/Desktop/repos/ex-brain/src/utils/cli-output.ts"}
+{"ts":"2026-04-09T05:06:29.186Z","type":"edit","agent":"SageGrove","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/index.ts"}
+{"ts":"2026-04-09T05:07:18.799Z","type":"edit","agent":"SageGrove","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/index.ts"}
+{"ts":"2026-04-09T05:08:50.895Z","type":"edit","agent":"SageGrove","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/index.ts"}
+{"ts":"2026-04-09T05:09:12.276Z","type":"edit","agent":"SageGrove","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/index.ts"}
+{"ts":"2026-04-09T05:09:33.615Z","type":"edit","agent":"SageGrove","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/index.ts"}
+{"ts":"2026-04-09T05:10:05.501Z","type":"edit","agent":"SageGrove","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/index.ts"}
+{"ts":"2026-04-09T05:10:27.263Z","type":"edit","agent":"SageGrove","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/index.ts"}
+{"ts":"2026-04-09T05:10:49.580Z","type":"edit","agent":"SageGrove","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/index.ts"}
