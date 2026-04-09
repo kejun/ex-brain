@@ -76,3 +76,37 @@
 {"ts":"2026-04-09T03:55:10.495Z","type":"edit","agent":"CalmJaguar","target":"/Users/kejun/Desktop/repos/ex-brain/src/repositories/brain-repo.ts"}
 {"ts":"2026-04-09T03:55:14.768Z","type":"edit","agent":"SwiftXenon","target":"/Users/kejun/Desktop/repos/ex-brain/src/ai/llm-client.ts"}
 {"ts":"2026-04-09T03:55:14.948Z","type":"leave","agent":"KeenKnight"}
+{"ts":"2026-04-09T03:55:16.573Z","type":"commit","agent":"JadeCastle","preview":"feat(mcp): 添加 MCP 工具全局错误处理 为 MCP Server 添加错误处理包装： - 添加 withErrorHandling 包装所有 20 个工具 - 添加 withResourceErrorHandling 包装资源处理器 - 返回结构化 JSON 错误信息（ok=false, error, message, hint） - 区分可恢复错误（网络超时等）和不可恢复错误 - 错误日志输出到 console.error Task: task-4"}
+{"ts":"2026-04-09T03:55:17.674Z","type":"edit","agent":"CalmJaguar","target":"/Users/kejun/Desktop/repos/ex-brain/src/repositories/brain-repo.ts"}
+{"ts":"2026-04-09T03:55:18.106Z","type":"edit","agent":"GoldBear","target":"/Users/kejun/Desktop/repos/ex-brain/src/db/client.ts"}
+{"ts":"2026-04-09T03:55:18.485Z","type":"release","agent":"JadeCastle","target":"src/mcp/server.ts"}
+{"ts":"2026-04-09T03:55:22.546Z","type":"edit","agent":"SwiftXenon","target":"/Users/kejun/Desktop/repos/ex-brain/src/ai/entity-link.ts"}
+{"ts":"2026-04-09T03:55:24.088Z","type":"task.done","agent":"JadeCastle","target":"task-4","preview":"MCP 工具全局错误处理 - 已完成 为 src/mcp/server.ts 添加全局错误处理： - withErrorHandling 包装所有 20 个工具（brain_search, brain_query, brain_get, brain_put, brain_delete, brain_ingest, brain_link, brain_backlinks, brain_timeline, brain_timeline_add, brain_timeline_list, brain_timeline_delete, brain_timeline_extract, brain_compile, brain_smart_ingest, brain_tags, brain_tag, brain_list, brain_stats, brain_raw） - withResourceErrorHandling 包装 2 个资源（brain-index, brain-page） - 返回结构化 JSON 错误信息：{ ok: false, error, message, hint, tool } - 区分可恢复错误（ECONNREFUSED, timeout, ETIMEDOUT, rate limit, 429, 503, 502）和不可恢复错误 - 错误日志输出到 console.error"}
+{"ts":"2026-04-09T03:55:26.738Z","type":"message","agent":"JadeCastle","preview":"Completed task-4: MCP 工具全局错误处理 - 为所有 20 个工具和 2 个资源添加错误处理包装"}
+{"ts":"2026-04-09T03:55:29.999Z","type":"reserve","agent":"HappyDragon","target":"src/ai/compiler.ts","preview":"task-6: 功能修复 - 需要修改多个核心文件"}
+{"ts":"2026-04-09T03:55:29.999Z","type":"reserve","agent":"HappyDragon","target":"src/ai/timeline-extractor.ts","preview":"task-6: 功能修复 - 需要修改多个核心文件"}
+{"ts":"2026-04-09T03:55:30.000Z","type":"reserve","agent":"HappyDragon","target":"src/types/index.ts","preview":"task-6: 功能修复 - 需要修改多个核心文件"}
+{"ts":"2026-04-09T03:55:30.000Z","type":"reserve","agent":"HappyDragon","target":"src/db/schema.ts","preview":"task-6: 功能修复 - 需要修改多个核心文件"}
+{"ts":"2026-04-09T03:55:30.001Z","type":"reserve","agent":"HappyDragon","target":"src/settings.ts","preview":"task-6: 功能修复 - 需要修改多个核心文件"}
+{"ts":"2026-04-09T03:55:30.001Z","type":"reserve","agent":"HappyDragon","target":"src/repositories/brain-repo.ts","preview":"task-6: 功能修复 - 需要修改多个核心文件"}
+{"ts":"2026-04-09T03:55:32.834Z","type":"message","agent":"HappyDragon","preview":"Starting task-6 (功能修复): 修复 changeType 映射、置信度阈值过滤、扩展日期解析、持久化 importance 字段"}
+{"ts":"2026-04-09T03:55:33.950Z","type":"leave","agent":"JadeCastle"}
+{"ts":"2026-04-09T03:55:38.842Z","type":"edit","agent":"CalmJaguar","target":"/Users/kejun/Desktop/repos/ex-brain/src/repositories/brain-repo.ts"}
+{"ts":"2026-04-09T03:55:45.221Z","type":"edit","agent":"HappyDragon","target":"/Users/kejun/Desktop/repos/ex-brain/src/db/schema.ts"}
+{"ts":"2026-04-09T03:55:50.344Z","type":"edit","agent":"HappyDragon","target":"/Users/kejun/Desktop/repos/ex-brain/src/types/index.ts"}
+{"ts":"2026-04-09T03:56:00.872Z","type":"edit","agent":"HappyDragon","target":"/Users/kejun/Desktop/repos/ex-brain/src/settings.ts"}
+{"ts":"2026-04-09T03:56:04.654Z","type":"edit","agent":"CalmJaguar","target":"/Users/kejun/Desktop/repos/ex-brain/src/repositories/brain-repo.ts"}
+{"ts":"2026-04-09T03:56:13.874Z","type":"edit","agent":"HappyDragon","target":"/Users/kejun/Desktop/repos/ex-brain/src/settings.ts"}
+{"ts":"2026-04-09T03:56:28.635Z","type":"edit","agent":"CalmJaguar","target":"/Users/kejun/Desktop/repos/ex-brain/src/repositories/brain-repo.ts"}
+{"ts":"2026-04-09T03:56:30.946Z","type":"edit","agent":"HappyDragon","target":"/Users/kejun/Desktop/repos/ex-brain/src/settings.ts"}
+{"ts":"2026-04-09T03:56:34.776Z","type":"test","agent":"GoldBear","preview":"passed"}
+{"ts":"2026-04-09T03:56:36.498Z","type":"test","agent":"SwiftXenon","preview":"passed"}
+{"ts":"2026-04-09T03:56:39.144Z","type":"edit","agent":"HappyDragon","target":"/Users/kejun/Desktop/repos/ex-brain/src/settings.ts"}
+{"ts":"2026-04-09T03:56:40.884Z","type":"edit","agent":"CalmJaguar","target":"/Users/kejun/Desktop/repos/ex-brain/src/repositories/brain-repo.ts"}
+{"ts":"2026-04-09T03:56:43.551Z","type":"edit","agent":"HappyDragon","target":"/Users/kejun/Desktop/repos/ex-brain/src/ai/compiler.ts"}
+{"ts":"2026-04-09T03:56:44.264Z","type":"test","agent":"SwiftXenon","preview":"failed"}
+{"ts":"2026-04-09T03:56:51.169Z","type":"test","agent":"SwiftXenon","preview":"passed"}
+{"ts":"2026-04-09T03:56:53.664Z","type":"edit","agent":"GoldBear","target":"/Users/kejun/Desktop/repos/ex-brain/src/settings.ts"}
+{"ts":"2026-04-09T03:56:57.831Z","type":"edit","agent":"HappyDragon","target":"/Users/kejun/Desktop/repos/ex-brain/src/ai/timeline-extractor.ts"}
+{"ts":"2026-04-09T03:57:13.750Z","type":"test","agent":"SwiftXenon","preview":"passed"}
+{"ts":"2026-04-09T03:57:15.999Z","type":"edit","agent":"SwiftXenon","target":"/Users/kejun/Desktop/repos/ex-brain/src/ai/llm-client.test.ts"}

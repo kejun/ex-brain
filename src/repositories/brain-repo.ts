@@ -442,155 +442,227 @@ export class BrainRepository {
    * Much more efficient than individual INSERT statements.
    */
   async timelineAddBatch(entries: TimelineEntry[]): Promise<void> {
-    if (entries.length === 0) return;
-    const now = nowIso();
-    
-    // Use multi-row INSERT for better performance
-    const placeholders = entries.map(() => `(?, ?, ?, ?, ?, ?)`).join(', ');
-    const values = entries.flatMap(entry => [
-      entry.pageSlug,
-      entry.date,
-      entry.source,
-      entry.summary,
-      entry.detail,
-      now,
-    ]);
-    
-    await this.db.client.execute(
-      `INSERT INTO timeline_entries (page_slug, date, source, summary, detail, created_at)
-       VALUES ${placeholders}`,
-      values,
-    );
+    try {
+      if (entries.length === 0) return;
+      const now = nowIso();
+      
+      // Use multi-row INSERT for better performance
+      const placeholders = entries.map(() => `(?, ?, ?, ?, ?, ?)`).join(', ');
+      const values = entries.flatMap(entry => [
+        entry.pageSlug,
+        entry.date,
+        entry.source,
+        entry.summary,
+        entry.detail,
+        now,
+      ]);
+      
+      await this.db.client.execute(
+        `INSERT INTO timeline_entries (page_slug, date, source, summary, detail, created_at)
+         VALUES ${placeholders}`,
+        values,
+      );
+    } catch (error) {
+      const dbError = wrapDbError(error, "timelineAddBatch", { count: entries.length });
+      logDbError(dbError);
+      throw dbError;
+    }
   }
 
   /**
    * Get timeline entries across all pages, sorted by date.
    */
   async timelineGlobal(limit = 100): Promise<TimelineEntry[]> {
-    const rows = many<{ id: number; page_slug: string; date: string; source: string; summary: string; detail: string }>(
-      await this.db.client.execute(
-        `SELECT id, page_slug, date, source, summary, detail
-         FROM timeline_entries
-         ORDER BY date DESC, id DESC
-         LIMIT ?`,
-        [limit],
-      ),
-    );
-    return rows.map((row) => ({
-      id: row.id,
-      pageSlug: row.page_slug,
-      date: row.date,
-      source: row.source,
-      summary: row.summary,
-      detail: row.detail,
-    }));
+    try {
+      const rows = many<{ id: number; page_slug: string; date: string; source: string; summary: string; detail: string }>(
+        await this.db.client.execute(
+          `SELECT id, page_slug, date, source, summary, detail
+           FROM timeline_entries
+           ORDER BY date DESC, id DESC
+           LIMIT ?`,
+          [limit],
+        ),
+      );
+      return rows.map((row) => ({
+        id: row.id,
+        pageSlug: row.page_slug,
+        date: row.date,
+        source: row.source,
+        summary: row.summary,
+        detail: row.detail,
+      }));
+    } catch (error) {
+      const dbError = wrapDbError(error, "timelineGlobal", { limit });
+      logDbError(dbError);
+      throw dbError;
+    }
   }
 
   /**
    * Delete a timeline entry by ID.
    */
   async timelineDelete(id: number): Promise<void> {
-    await this.db.client.execute(
-      "DELETE FROM timeline_entries WHERE id = ?",
-      [id],
-    );
+    try {
+      await this.db.client.execute(
+        "DELETE FROM timeline_entries WHERE id = ?",
+        [id],
+      );
+    } catch (error) {
+      const dbError = wrapDbError(error, "timelineDelete", { id });
+      logDbError(dbError);
+      throw dbError;
+    }
   }
 
   /**
    * Update a timeline entry by ID.
    */
   async timelineUpdate(id: number, updates: Partial<TimelineEntry>): Promise<void> {
-    const fields: string[] = [];
-    const values: unknown[] = [];
-    if (updates.date) { fields.push("date = ?"); values.push(updates.date); }
-    if (updates.source) { fields.push("source = ?"); values.push(updates.source); }
-    if (updates.summary) { fields.push("summary = ?"); values.push(updates.summary); }
-    if (updates.detail !== undefined) { fields.push("detail = ?"); values.push(updates.detail); }
-    if (fields.length === 0) return;
-    values.push(id);
-    await this.db.client.execute(
-      `UPDATE timeline_entries SET ${fields.join(", ")} WHERE id = ?`,
-      values,
-    );
+    try {
+      const fields: string[] = [];
+      const values: unknown[] = [];
+      if (updates.date) { fields.push("date = ?"); values.push(updates.date); }
+      if (updates.source) { fields.push("source = ?"); values.push(updates.source); }
+      if (updates.summary) { fields.push("summary = ?"); values.push(updates.summary); }
+      if (updates.detail !== undefined) { fields.push("detail = ?"); values.push(updates.detail); }
+      if (fields.length === 0) return;
+      values.push(id);
+      await this.db.client.execute(
+        `UPDATE timeline_entries SET ${fields.join(", ")} WHERE id = ?`,
+        values,
+      );
+    } catch (error) {
+      const dbError = wrapDbError(error, "timelineUpdate", { id });
+      logDbError(dbError);
+      throw dbError;
+    }
   }
 
   async tags(slug: string): Promise<string[]> {
-    const rows = many<{ tag: string }>(
-      await this.db.client.execute(
-        "SELECT tag FROM page_tags WHERE page_slug = ? ORDER BY tag ASC",
-        [slug],
-      ),
-    );
-    return rows.map((row) => row.tag);
+    try {
+      const rows = many<{ tag: string }>(
+        await this.db.client.execute(
+          "SELECT tag FROM page_tags WHERE page_slug = ? ORDER BY tag ASC",
+          [slug],
+        ),
+      );
+      return rows.map((row) => row.tag);
+    } catch (error) {
+      const dbError = wrapDbError(error, "tags", { slug });
+      logDbError(dbError);
+      throw dbError;
+    }
   }
 
   async tag(slug: string, tag: string): Promise<void> {
-    await this.db.client.execute(
-      `INSERT INTO page_tags (page_slug, tag, created_at)
-       VALUES (?, ?, ?)
-       ON DUPLICATE KEY UPDATE tag = VALUES(tag)`,
-      [slug, tag, nowIso()],
-    );
+    try {
+      await this.db.client.execute(
+        `INSERT INTO page_tags (page_slug, tag, created_at)
+         VALUES (?, ?, ?)
+         ON DUPLICATE KEY UPDATE tag = VALUES(tag)`,
+        [slug, tag, nowIso()],
+      );
+    } catch (error) {
+      const dbError = wrapDbError(error, "tag", { slug, tag });
+      logDbError(dbError);
+      throw dbError;
+    }
   }
 
   async untag(slug: string, tag: string): Promise<void> {
-    await this.db.client.execute(
-      "DELETE FROM page_tags WHERE page_slug = ? AND tag = ?",
-      [slug, tag],
-    );
+    try {
+      await this.db.client.execute(
+        "DELETE FROM page_tags WHERE page_slug = ? AND tag = ?",
+        [slug, tag],
+      );
+    } catch (error) {
+      const dbError = wrapDbError(error, "untag", { slug, tag });
+      logDbError(dbError);
+      throw dbError;
+    }
   }
 
   async readRaw(slug: string, source?: string): Promise<unknown[]> {
-    const params: unknown[] = [slug];
-    let sql =
-      "SELECT source, data, fetched_at FROM raw_data WHERE page_slug = ?";
-    if (source) {
-      sql += " AND source = ?";
-      params.push(source);
+    try {
+      const params: unknown[] = [slug];
+      let sql =
+        "SELECT source, data, fetched_at FROM raw_data WHERE page_slug = ?";
+      if (source) {
+        sql += " AND source = ?";
+        params.push(source);
+      }
+      sql += " ORDER BY fetched_at DESC";
+      const rows = many<{ source: string; data: string; fetched_at: string }>(
+        await this.db.client.execute(sql, params),
+      );
+      return rows.map((row) => ({
+        source: row.source,
+        fetchedAt: row.fetched_at,
+        data: safeJson(row.data),
+      }));
+    } catch (error) {
+      const dbError = wrapDbError(error, "readRaw", { slug, source });
+      logDbError(dbError);
+      throw dbError;
     }
-    sql += " ORDER BY fetched_at DESC";
-    const rows = many<{ source: string; data: string; fetched_at: string }>(
-      await this.db.client.execute(sql, params),
-    );
-    return rows.map((row) => ({
-      source: row.source,
-      fetchedAt: row.fetched_at,
-      data: safeJson(row.data),
-    }));
   }
 
   async writeRaw(slug: string, source: string, data: unknown): Promise<void> {
-    await this.db.client.execute(
-      `INSERT INTO raw_data (page_slug, source, data, fetched_at)
-       VALUES (?, ?, ?, ?)`,
-      [slug, source, JSON.stringify(data), nowIso()],
-    );
+    try {
+      await this.db.client.execute(
+        `INSERT INTO raw_data (page_slug, source, data, fetched_at)
+         VALUES (?, ?, ?, ?)`,
+        [slug, source, JSON.stringify(data), nowIso()],
+      );
+    } catch (error) {
+      const dbError = wrapDbError(error, "writeRaw", { slug, source });
+      logDbError(dbError);
+      throw dbError;
+    }
   }
 
   async backlinks(slug: string): Promise<string[]> {
-    const rows = many<{ from_slug: string }>(
-      await this.db.client.execute(
-        "SELECT from_slug FROM links WHERE to_slug = ? ORDER BY from_slug ASC",
-        [slug],
-      ),
-    );
-    return rows.map((row) => row.from_slug);
+    try {
+      const rows = many<{ from_slug: string }>(
+        await this.db.client.execute(
+          "SELECT from_slug FROM links WHERE to_slug = ? ORDER BY from_slug ASC",
+          [slug],
+        ),
+      );
+      return rows.map((row) => row.from_slug);
+    } catch (error) {
+      const dbError = wrapDbError(error, "backlinks", { slug });
+      logDbError(dbError);
+      throw dbError;
+    }
   }
 
   async allSlugs(): Promise<string[]> {
-    const rows = many<{ slug: string }>(
-      await this.db.client.execute("SELECT slug FROM pages ORDER BY slug ASC"),
-    );
-    return rows.map((row) => row.slug);
+    try {
+      const rows = many<{ slug: string }>(
+        await this.db.client.execute("SELECT slug FROM pages ORDER BY slug ASC"),
+      );
+      return rows.map((row) => row.slug);
+    } catch (error) {
+      const dbError = wrapDbError(error, "allSlugs");
+      logDbError(dbError);
+      throw dbError;
+    }
   }
 
   async deletePage(slug: string): Promise<void> {
-    await this.db.client.execute("DELETE FROM pages WHERE slug = ?", [slug]);
-    // Best-effort cleanup of related data (ignore errors for missing rows)
-    await this.db.client.execute("DELETE FROM links WHERE from_slug = ? OR to_slug = ?", [slug, slug]);
-    await this.db.client.execute("DELETE FROM page_tags WHERE page_slug = ?", [slug]);
-    await this.db.client.execute("DELETE FROM timeline_entries WHERE page_slug = ?", [slug]);
-    await this.db.client.execute("DELETE FROM raw_data WHERE page_slug = ?", [slug]);
+    try {
+      await this.db.client.execute("DELETE FROM pages WHERE slug = ?", [slug]);
+      // Best-effort cleanup of related data (ignore errors for missing rows)
+      await this.db.client.execute("DELETE FROM links WHERE from_slug = ? OR to_slug = ?", [slug, slug]);
+      await this.db.client.execute("DELETE FROM page_tags WHERE page_slug = ?", [slug]);
+      await this.db.client.execute("DELETE FROM timeline_entries WHERE page_slug = ?", [slug]);
+      await this.db.client.execute("DELETE FROM raw_data WHERE page_slug = ?", [slug]);
+    } catch (error) {
+      const dbError = wrapDbError(error, "deletePage", { slug });
+      logDbError(dbError);
+      throw dbError;
+    }
   }
 
   /**

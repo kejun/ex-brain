@@ -26,6 +26,7 @@ export interface TimelineEntry {
   source: string;
   summary: string;
   detail: string;
+  importance?: number;
 }
 
 export interface SearchHit {

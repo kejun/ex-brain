@@ -275,7 +275,7 @@ Rewrite the compiled truth. Output ONLY JSON with this schema:
 {
   "compiledTruth": "the full rewritten compiled truth content (markdown format)",
   "changed": true|false,
-  "changeType": "update|replace|conflict|none",
+  "changeType": "append|update|replace|conflict|none",
   "changeSummary": "human-readable summary of what changed"
 }
 

@@ -207,12 +207,18 @@ function parseExtractionResponse(resp: string, pageSlug: string): TimelineEntry[
       const date = normalizeDate(String(entry.date ?? ""));
       if (!date) continue;
       
+      // Get importance from the response, default to 3
+      const importance = typeof entry.importance === "number" 
+        ? Math.max(1, Math.min(5, Math.round(entry.importance))) 
+        : 3;
+      
       entries.push({
         pageSlug,
         date,
         source: "extracted",
         summary: String(entry.summary ?? "").slice(0, 120),
         detail: String(entry.detail ?? ""),
+        importance,
       });
     }
     

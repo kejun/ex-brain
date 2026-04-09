@@ -24,6 +24,7 @@ export const SQL_SCHEMA = [
     source VARCHAR(128) NOT NULL,
     summary VARCHAR(1024) NOT NULL,
     detail MEDIUMTEXT NOT NULL,
+    importance INT NOT NULL DEFAULT 3,
     created_at VARCHAR(64) NOT NULL
   )`,
   `CREATE TABLE IF NOT EXISTS raw_data (

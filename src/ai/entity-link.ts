@@ -92,7 +92,7 @@ export async function extractRelations(
     context = trimmed.slice(0, 4000) + "\n\n...\n\n" + trimmed.slice(-1000);
   }
 
-  if (!resolveApiKey(llm)) return [];
+  if (!isLLMConfigured(llm)) return [];
 
   const systemPrompt =
     "You are a knowledge graph extraction assistant. " +
