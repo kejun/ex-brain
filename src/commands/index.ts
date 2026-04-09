@@ -1568,7 +1568,20 @@ async function withRepo(
   const db = await BrainDb.connect(dbPath, settings);
   const repo = new BrainRepository(db);
   await callback(repo);
-  // CLI 短生命周期应用：强制退出绕过 seekdb native 模块的 cleanup bug
+  
+  // Gracefully close database
+  // Note: seekdb SDK's InternalEmbeddedClient.close() is empty in embedded mode
+  // Data may not flush properly. Use remote seekdb server for reliability.
+  try {
+    await db.close();
+  } catch (e) {
+    // Close may fail due to seekdb native bug
+  }
+  
+  // Give seekdb extra time after close
+  await new Promise((r) => setTimeout(r, 500));
+  
+  // CLI: force exit to bypass seekdb native cleanup segfault
   process.exit(0);
 }
 

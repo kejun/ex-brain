@@ -59,3 +59,15 @@
 {"ts":"2026-04-09T08:03:27.963Z","type":"edit","agent":"IronTiger","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/index.ts"}
 {"ts":"2026-04-09T08:03:40.477Z","type":"edit","agent":"IronTiger","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/index.ts"}
 {"ts":"2026-04-09T08:04:13.674Z","type":"edit","agent":"IronTiger","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/index.ts"}
+{"ts":"2026-04-09T08:05:15.456Z","type":"commit","agent":"IronTiger","preview":"feat: add --skip-index option to import command Allows skipping vector indexing to avoid potential seekdb crashes during the indexing phase. Useful when seekdb native module is unstable."}
+{"ts":"2026-04-09T08:23:35.681Z","type":"test","agent":"IronTiger","preview":"failed"}
+{"ts":"2026-04-09T08:27:16.022Z","type":"test","agent":"IronTiger","preview":"passed"}
+{"ts":"2026-04-09T08:29:17.925Z","type":"edit","agent":"IronTiger","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/index.ts"}
+{"ts":"2026-04-09T08:29:38.215Z","type":"edit","agent":"IronTiger","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/index.ts"}
+{"ts":"2026-04-09T08:32:20.475Z","type":"edit","agent":"IronTiger","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/index.ts"}
+{"ts":"2026-04-09T08:32:53.468Z","type":"edit","agent":"IronTiger","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/index.ts"}
+{"ts":"2026-04-09T08:38:46.778Z","type":"test","agent":"IronTiger","preview":"passed"}
+{"ts":"2026-04-09T08:41:23.005Z","type":"edit","agent":"IronTiger","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/index.ts"}
+{"ts":"2026-04-09T08:41:30.992Z","type":"edit","agent":"IronTiger","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/index.ts"}
+{"ts":"2026-04-09T08:44:00.978Z","type":"test","agent":"IronTiger","preview":"passed"}
+{"ts":"2026-04-09T08:44:26.423Z","type":"edit","agent":"IronTiger","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/index.ts"}
