@@ -6,7 +6,7 @@ import type { ResolvedSettings } from "../settings";
 import { createBrainEmbeddingFunction } from "../ai/embed-factory";
 import { DEFAULT_DB_NAME, PAGES_COLLECTION } from "../config";
 import { SQL_SCHEMA } from "./schema";
-import { DbError, wrapDbError, type DbErrorCategory } from "./errors";
+import { DbError, wrapDbError, DbErrorCategory } from "./errors";
 
 function useRemoteSeekdb(): boolean {
   return Boolean(process.env.EBRAIN_SEEKDB_HOST?.trim());

@@ -6,15 +6,18 @@
 /**
  * Database error categories
  */
-export type DbErrorCategory =
-  | "CONNECTION"
-  | "QUERY"
-  | "SCHEMA"
-  | "VALIDATION"
-  | "NOT_FOUND"
-  | "CONSTRAINT"
-  | "TIMEOUT"
-  | "UNKNOWN";
+export const DbErrorCategory = {
+  CONNECTION: "CONNECTION",
+  QUERY: "QUERY",
+  SCHEMA: "SCHEMA",
+  VALIDATION: "VALIDATION",
+  NOT_FOUND: "NOT_FOUND",
+  CONSTRAINT: "CONSTRAINT",
+  TIMEOUT: "TIMEOUT",
+  UNKNOWN: "UNKNOWN",
+} as const;
+
+export type DbErrorCategory = (typeof DbErrorCategory)[keyof typeof DbErrorCategory];
 
 /**
  * Database operation types for error context
@@ -62,7 +65,7 @@ export class DbError extends Error {
     message: string,
     public readonly category: DbErrorCategory,
     public readonly operation: DbOperation,
-    public readonly cause?: unknown,
+    public readonly dbCause?: unknown,
     public readonly retryable: boolean = false,
   ) {
     super(message);
@@ -90,9 +93,9 @@ export class DbError extends Error {
       category: this.category,
       operation: this.operation,
       retryable: this.retryable,
-      cause: this.cause instanceof Error
-        ? { name: this.cause.name, message: this.cause.message }
-        : this.cause,
+      dbCause: this.dbCause instanceof Error
+        ? { name: this.dbCause.name, message: this.dbCause.message }
+        : this.dbCause,
       stack: this.stack,
     };
   }

@@ -20,7 +20,7 @@ import {
 } from "../markdown/parser";
 import { BrainRepository } from "../repositories/brain-repo";
 import { loadSettings, SETTINGS_PATH, DEFAULT_DB_PATH, type ResolvedLLM } from "../settings";
-import { extractRelations, entityToSlug, EntityType } from "../ai/entity-link";
+import { extractRelations, entityToSlug, type EntityType } from "../ai/entity-link";
 import { registerCompileCommands } from "./compile-cmd";
 import { registerGraphCommand } from "./graph-cmd";
 import { createProgress, formatDuration } from "../utils/progress";

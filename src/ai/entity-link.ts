@@ -76,10 +76,15 @@ const RELATION_TYPES = [
 /**
  * Use the configured LLM to extract entity relationships from text.
  * Returns a list of relations with relation type, confidence, and context.
+ * Filters out relations with confidence below the threshold (default: 0.7).
  */
 export async function extractRelations(
   content: string,
   llm: ResolvedLLM,
+  options?: {
+    /** Minimum confidence threshold (0-1). Relations below this are filtered out. Default: 0.7 */
+    confidenceThreshold?: number;
+  },
 ): Promise<ExtractionResult> {
   const trimmed = content.trim();
   if (!trimmed) return [];
@@ -143,6 +148,10 @@ export async function extractRelations(
     console.warn(`[ebrain] Entity extraction error: ${msg}`);
     return [];
   }
+
+  // Filter by confidence threshold (default 0.7)
+  const threshold = options?.confidenceThreshold ?? 0.7;
+  return relations.filter((r) => r.confidence >= threshold);
 }
 
 function parseEntityRef(val: unknown): EntityRef | null {

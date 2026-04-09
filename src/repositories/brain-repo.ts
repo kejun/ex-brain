@@ -12,7 +12,7 @@ import type { TimelineExtractionResult } from "../ai/timeline-extractor";
 import { compileTruth } from "../ai/compiler";
 import { extractTimelineEvents } from "../ai/timeline-extractor";
 import { BrainDb } from "../db/client";
-import { DbError, wrapDbError, logDbError, DbOperation } from "../db/errors";
+import { DbError, wrapDbError, logDbError, type DbOperation } from "../db/errors";
 
 type SqlRow = Record<string, unknown>;
 
@@ -474,9 +474,9 @@ export class BrainRepository {
    */
   async timelineGlobal(limit = 100): Promise<TimelineEntry[]> {
     try {
-      const rows = many<{ id: number; page_slug: string; date: string; source: string; summary: string; detail: string }>(
+      const rows = many<{ id: number; page_slug: string; date: string; source: string; summary: string; detail: string; importance: number }>(
         await this.db.client.execute(
-          `SELECT id, page_slug, date, source, summary, detail
+          `SELECT id, page_slug, date, source, summary, detail, importance
            FROM timeline_entries
            ORDER BY date DESC, id DESC
            LIMIT ?`,
@@ -490,6 +490,7 @@ export class BrainRepository {
         source: row.source,
         summary: row.summary,
         detail: row.detail,
+        importance: row.importance ?? 3,
       }));
     } catch (error) {
       const dbError = wrapDbError(error, "timelineGlobal", { limit });
@@ -525,6 +526,7 @@ export class BrainRepository {
       if (updates.source) { fields.push("source = ?"); values.push(updates.source); }
       if (updates.summary) { fields.push("summary = ?"); values.push(updates.summary); }
       if (updates.detail !== undefined) { fields.push("detail = ?"); values.push(updates.detail); }
+      if (updates.importance !== undefined) { fields.push("importance = ?"); values.push(updates.importance); }
       if (fields.length === 0) return;
       values.push(id);
       await this.db.client.execute(
