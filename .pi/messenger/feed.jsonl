@@ -49,3 +49,15 @@
 {"ts":"2026-04-09T03:54:12.066Z","type":"join","agent":"HappyDragon"}
 {"ts":"2026-04-09T03:54:12.638Z","type":"join","agent":"GoldBear"}
 {"ts":"2026-04-09T03:54:13.956Z","type":"join","agent":"LoudMoon"}
+{"ts":"2026-04-09T03:54:18.218Z","type":"edit","agent":"CalmJaguar","target":"/Users/kejun/Desktop/repos/ex-brain/src/repositories/brain-repo.ts"}
+{"ts":"2026-04-09T03:54:25.319Z","type":"commit","agent":"DarkKnight","preview":"refactor(ai): use unified llm-client module - Created src/ai/llm-client.ts with retry mechanism (3 retries, exponential backoff) - Refactored compiler.ts, timeline-extractor.ts, entity-link.ts to use llm-client - Removed duplicate callLLM (~50 lines each) and resolveApiKey (~6 lines each) functions - Added error classification: APIError, TimeoutError, RateLimitError - Added timeout control (default 60s) - Total reduction: ~162 lines across 3 AI modules Task: task-2"}
+{"ts":"2026-04-09T03:54:27.258Z","type":"release","agent":"DarkKnight","target":"src/ai/compiler.ts"}
+{"ts":"2026-04-09T03:54:27.258Z","type":"release","agent":"DarkKnight","target":"src/ai/timeline-extractor.ts"}
+{"ts":"2026-04-09T03:54:27.258Z","type":"release","agent":"DarkKnight","target":"src/ai/entity-link.ts"}
+{"ts":"2026-04-09T03:54:30.972Z","type":"edit","agent":"CalmJaguar","target":"/Users/kejun/Desktop/repos/ex-brain/src/repositories/brain-repo.ts"}
+{"ts":"2026-04-09T03:54:31.076Z","type":"task.done","agent":"DarkKnight","target":"task-2","preview":"重构 AI 模块使用统一客户端：将 compiler.ts, timeline-extractor.ts, entity-link.ts 改为使用 llm-client，删除重复的 callLLM 和 resolveApiKey 函数，总共减少约 162 行代码，所有 AI 功能测试通过。"}
+{"ts":"2026-04-09T03:54:31.224Z","type":"message","agent":"GoldBear","preview":"Starting task-7 (综合验证与文档更新) — 将运行测试、验证核心功能、更新文档"}
+{"ts":"2026-04-09T03:54:31.772Z","type":"edit","agent":"JadeCastle","target":"/Users/kejun/Desktop/repos/ex-brain/src/mcp/server.ts"}
+{"ts":"2026-04-09T03:54:34.225Z","type":"message","agent":"DarkKnight","preview":"Completed task-2: 重构 AI 模块使用统一客户端。compiler.ts, timeline-extractor.ts, entity-link.ts 已改用 llm-client，减少 ~162 行代码，测试通过。"}
+{"ts":"2026-04-09T03:54:40.273Z","type":"edit","agent":"CalmJaguar","target":"/Users/kejun/Desktop/repos/ex-brain/src/repositories/brain-repo.ts"}
+{"ts":"2026-04-09T03:54:41.499Z","type":"edit","agent":"SwiftXenon","target":"/Users/kejun/Desktop/repos/ex-brain/src/ai/entity-link.ts"}

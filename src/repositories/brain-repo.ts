@@ -321,29 +321,36 @@ export class BrainRepository {
    * More efficient than calling syncPageToSearch for each page.
    */
   async syncPagesToSearch(slugs: string[]): Promise<void> {
-    const pages = await Promise.all(slugs.map(s => this.getPage(s)));
-    const validPages = pages.filter((p): p is PageRecord => p !== null);
-    if (validPages.length === 0) return;
-    
-    const MAX_DOC_LENGTH = 8000;
-    const docs = validPages.map(p => {
-      const fullDoc = `${p.title}\n\n${p.compiledTruth}\n\n${p.timeline}`;
-      return fullDoc.length > MAX_DOC_LENGTH
-        ? fullDoc.slice(0, MAX_DOC_LENGTH) + '\n... (truncated)'
-        : fullDoc;
-    });
-    const metas = validPages.map(p => ({
-      slug: p.slug,
-      title: p.title,
-      type: p.type,
-      updatedAt: p.updatedAt,
-    }));
-    
-    await this.db.pagesCollection.upsert({
-      ids: validPages.map(p => p.slug),
-      documents: docs,
-      metadatas: metas,
-    });
+    try {
+      const pages = await Promise.all(slugs.map(s => this.getPage(s)));
+      const validPages = pages.filter((p): p is PageRecord => p !== null);
+      if (validPages.length === 0) return;
+      
+      const MAX_DOC_LENGTH = 8000;
+      const docs = validPages.map(p => {
+        const fullDoc = `${p.title}\n\n${p.compiledTruth}\n\n${p.timeline}`;
+        return fullDoc.length > MAX_DOC_LENGTH
+          ? fullDoc.slice(0, MAX_DOC_LENGTH) + '\n... (truncated)'
+          : fullDoc;
+      });
+      const metas = validPages.map(p => ({
+        slug: p.slug,
+        title: p.title,
+        type: p.type,
+        updatedAt: p.updatedAt,
+      }));
+      
+      await this.db.pagesCollection.upsert({
+        ids: validPages.map(p => p.slug),
+        documents: docs,
+        metadatas: metas,
+      });
+    } catch (error) {
+      const dbError = wrapDbError(error, "syncPagesToSearch", { count: slugs.length });
+      logDbError(dbError);
+      // Don't throw - sync failure shouldn't break the main flow
+      console.warn(`[BrainRepo] syncPagesToSearch failed: ${dbError.message}`);
+    }
   }
 
   async embedAll(): Promise<number> {

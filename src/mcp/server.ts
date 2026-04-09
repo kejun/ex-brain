@@ -545,18 +545,29 @@ export async function startMcpServer(dbPath: string): Promise<void> {
   // Tag Tools
   // ---------------------------------------------------------------------------
 
+  const brainTagsHandler = async ({ slug }: { slug: string }) => ({
+    content: [
+      { type: "text", text: JSON.stringify(await repo.tags(slug), null, 2) },
+    ],
+  });
+
   server.registerTool(
     "brain_tags",
     {
       description: "List tags on a page",
       inputSchema: z.object({ slug: z.string() }),
     },
-    async ({ slug }) => ({
-      content: [
-        { type: "text", text: JSON.stringify(await repo.tags(slug), null, 2) },
-      ],
-    }),
+    withErrorHandling("brain_tags", brainTagsHandler),
   );
+
+  const brainTagHandler = async ({ slug, tag, remove }: { slug: string; tag: string; remove?: boolean }) => {
+    if (remove) {
+      await repo.untag(slug, tag);
+    } else {
+      await repo.tag(slug, tag);
+    }
+    return { content: [{ type: "text", text: JSON.stringify({ ok: true }) }] };
+  };
 
   server.registerTool(
     "brain_tag",
@@ -568,19 +579,25 @@ export async function startMcpServer(dbPath: string): Promise<void> {
         remove: z.boolean().optional(),
       }),
     },
-    async ({ slug, tag, remove }) => {
-      if (remove) {
-        await repo.untag(slug, tag);
-      } else {
-        await repo.tag(slug, tag);
-      }
-      return { content: [{ type: "text", text: JSON.stringify({ ok: true }) }] };
-    },
+    withErrorHandling("brain_tag", brainTagHandler),
   );
 
   // ---------------------------------------------------------------------------
   // Query & List Tools
   // ---------------------------------------------------------------------------
+
+  const brainListHandler = async ({ type, tag, limit }: { type?: string; tag?: string; limit?: number }) => ({
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify(
+          await repo.listPages({ type, tag, limit: limit ?? 50 }),
+          null,
+          2,
+        ),
+      },
+    ],
+  });
 
   server.registerTool(
     "brain_list",
@@ -592,27 +609,33 @@ export async function startMcpServer(dbPath: string): Promise<void> {
         limit: z.number().int().positive().optional(),
       }),
     },
-    async ({ type, tag, limit }) => ({
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(
-            await repo.listPages({ type, tag, limit: limit ?? 50 }),
-            null,
-            2,
-          ),
-        },
-      ],
-    }),
+    withErrorHandling("brain_list", brainListHandler),
   );
+
+  const brainStatsHandler = async () => ({
+    content: [{ type: "text", text: JSON.stringify(await repo.stats(), null, 2) }],
+  });
 
   server.registerTool(
     "brain_stats",
     { description: "Show knowledge base statistics", inputSchema: z.object({}) },
-    async () => ({
-      content: [{ type: "text", text: JSON.stringify(await repo.stats(), null, 2) }],
-    }),
+    withErrorHandling("brain_stats", brainStatsHandler),
   );
+
+  const brainRawHandler = async ({ slug, source, data }: { slug: string; source?: string; data?: unknown }) => {
+    if (data !== undefined) {
+      await repo.writeRaw(slug, source ?? "manual", data);
+      return { content: [{ type: "text", text: JSON.stringify({ ok: true }) }] };
+    }
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(await repo.readRaw(slug, source), null, 2),
+        },
+      ],
+    };
+  };
 
   server.registerTool(
     "brain_raw",
@@ -624,20 +647,7 @@ export async function startMcpServer(dbPath: string): Promise<void> {
         data: z.unknown().optional(),
       }),
     },
-    async ({ slug, source, data }) => {
-      if (data !== undefined) {
-        await repo.writeRaw(slug, source ?? "manual", data);
-        return { content: [{ type: "text", text: JSON.stringify({ ok: true }) }] };
-      }
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(await repo.readRaw(slug, source), null, 2),
-          },
-        ],
-      };
-    },
+    withErrorHandling("brain_raw", brainRawHandler),
   );
 
   // ---------------------------------------------------------------------------
