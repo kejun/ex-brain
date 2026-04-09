@@ -677,6 +677,26 @@ export class BrainRepository {
     }
   }
 
+  /**
+   * Get outgoing links from a page (pages this page links to).
+   * Returns array of { slug, context }.
+   */
+  async outgoingLinks(slug: string): Promise<Array<{ slug: string; context: string }>> {
+    try {
+      const rows = many<{ to_slug: string; context: string }>(
+        await this.db.client.execute(
+          "SELECT to_slug, context FROM links WHERE from_slug = ? ORDER BY to_slug ASC",
+          [slug],
+        ),
+      );
+      return rows.map((row) => ({ slug: row.to_slug, context: row.context }));
+    } catch (error) {
+      const dbError = wrapDbError(error, "outgoingLinks", { slug });
+      logDbError(dbError);
+      throw dbError;
+    }
+  }
+
   async allSlugs(): Promise<string[]> {
     try {
       const rows = many<{ slug: string }>(

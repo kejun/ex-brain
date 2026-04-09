@@ -518,7 +518,7 @@ Examples:
         const limit = Number(opts.limit ?? 10);
         const hits = await repo.query(question, limit);
         
-        // If --llm flag, generate answer based on context
+        // If --llm flag, generate answer based on multi-layer context
         if (opts.llm) {
           const settings = await loadSettings();
           if (!settings.llm.baseURL) {
@@ -529,35 +529,48 @@ Examples:
           const progress = createProgress();
           progress.start("Searching knowledge base...");
           
-          // Use excerpts from hits as context (avoids extra DB queries that cause segfault)
           const contextLimit = Number(opts.contextLimit ?? 5);
           const topHits = hits.slice(0, contextLimit);
           
-          // Build context from search results
-          const contextPages = topHits.map(hit => ({
-            slug: hit.slug,
-            title: hit.title,
-            excerpt: hit.excerpt || "",
-          }));
+          if (topHits.length === 0) {
+            progress.stop();
+            process.stderr.write("No relevant pages found.\n");
+            print(program, { answer: "No relevant information found in the knowledge base.", sources: [] });
+            return;
+          }
           
-          progress.update("Generating answer...");
+          // Collect multi-layer context (primary + raw data + linked pages scored by relevance)
+          progress.update(`Loading pages, raw documents, and linked content...`);
+          // ~100KB char budget ≈ 25K tokens, safe for most models
+          const MAX_CONTEXT_CHARS = 100_000;
+          const { sections, totalChars, stats } = await collectContextForLLM(repo, topHits, question, MAX_CONTEXT_CHARS);
+          
+          if (sections.length === 0) {
+            progress.stop();
+            process.stderr.write("No content could be loaded.\n");
+            print(program, { answer: "Failed to load page content.", sources: [] });
+            return;
+          }
+          
+          progress.update(`Generating answer from ${stats.primaryPages} page(s), ${stats.rawDocs} raw doc(s), ${stats.linkedPages} linked page(s)...`);
           const startTime = Date.now();
           
-          const answer = await generateAnswerFromExcerpts(question, contextPages, settings.llm);
+          const answer = await generateAnswerWithContext(question, sections, stats, settings.llm);
           
           const duration = formatDuration(Date.now() - startTime);
-          progress.succeed(`Answer generated (${duration})`);
+          progress.succeed(`Answer generated (${duration}, context: ${(totalChars / 1024).toFixed(1)}KB)`);
           
-          // Output markdown
+          // Output answer as markdown
           console.log("\n" + answer);
           
-          // Show sources
-          if (contextPages.length > 0) {
-            console.log("\n---\n**Sources:**\n");
-            contextPages.forEach((p, i) => {
-              console.log(`${i + 1}. [[${p.slug}|${p.title}]]`);
-            });
+          // Show sources breakdown
+          console.log("\n---\n**Sources:**\n");
+          for (let i = 0; i < sections.length; i++) {
+            const s = sections[i];
+            const icon = s.type === 'primary' ? '📄' : s.type === 'raw_data' ? '📎' : '🔗';
+            console.log(`${icon} ${i + 1}. [[${s.slug}|${s.title}]] — ${s.label} (${(s.content.length / 1024).toFixed(1)}KB)`);
           }
+          console.log(`\n*Context: ${stats.primaryPages} page(s), ${stats.rawDocs} raw doc(s), ${stats.linkedPages} linked page(s)*`);
         } else {
           print(program, hits);
         }
@@ -1623,18 +1636,249 @@ function normalizeLinkSlug(path: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// LLM Answer Generation
+// LLM Answer Generation — Multi-layer Context Collection
 // ---------------------------------------------------------------------------
 
-interface ContextPage {
+/** A single section of context for the LLM prompt. */
+interface ContextSection {
+  type: 'primary' | 'raw_data' | 'linked';
   slug: string;
   title: string;
-  excerpt: string;
+  content: string;
+  /** Human-readable label like "原始文档 (crm)" or "关联页面: projects/alpha". */
+  label: string;
 }
 
-async function generateAnswerFromExcerpts(
+/**
+ * Collect multi-layer context for LLM answer generation.
+ * 
+ * Layers (in priority order):
+ * 1. Primary: compiledTruth + timeline of each hit page
+ * 2. Raw data: original documents stored via raw.set
+ * 3. Linked pages: compiledTruth of pages linked to/from hit pages
+ * 
+ * Budget is enforced via total character limit.
+ */
+async function collectContextForLLM(
+  repo: BrainRepository,
+  hits: Array<{ slug: string; title: string; score: number }>,
   question: string,
-  pages: ContextPage[],
+  maxChars: number,
+): Promise<{ sections: ContextSection[]; totalChars: number; stats: ContextStats }> {
+  const sections: ContextSection[] = [];
+  let totalChars = 0;
+  const stats: ContextStats = {
+    primaryPages: 0,
+    rawDocs: 0,
+    linkedPages: 0,
+    skippedChars: 0,
+  };
+
+  const seenSlugs = new Set<string>();
+
+  function addSection(section: ContextSection): boolean {
+    if (seenSlugs.has(`${section.type}:${section.slug}:${section.label}`)) {
+      return false;
+    }
+    const budget = maxChars - totalChars;
+    if (section.content.length > budget && sections.length > 0) {
+      // Truncate to fit budget
+      section.content = section.content.slice(0, budget - 20) + '\n...[truncated]';
+      stats.skippedChars += section.content.length - budget;
+    }
+    if (section.content.length > 0) {
+      sections.push(section);
+      totalChars += section.content.length;
+      seenSlugs.add(`${section.type}:${section.slug}:${section.label}`);
+      return true;
+    }
+    return false;
+  }
+
+  // Layer 1: Primary pages (compiledTruth + timeline)
+  for (const hit of hits) {
+    const page = await repo.getPage(hit.slug);
+    if (!page) continue;
+
+    const parts: string[] = [];
+    if (page.compiledTruth?.trim()) {
+      parts.push(page.compiledTruth.trim());
+    }
+    const tl = page.timeline?.trim();
+    if (tl) {
+      parts.push(`## 时间线\n${tl}`);
+    }
+
+    if (parts.length > 0) {
+      addSection({
+        type: 'primary',
+        slug: page.slug,
+        title: page.title,
+        content: parts.join('\n\n'),
+        label: `页面正文`,
+      });
+      stats.primaryPages++;
+    }
+  }
+
+  // Layer 2: Raw data (original documents)
+  for (const hit of hits) {
+    try {
+      const rawRows = await repo.readRaw(hit.slug) as Array<{ source: string; data: unknown; fetchedAt?: string }>;
+      for (const row of rawRows) {
+        let rawContent = '';
+        if (typeof row.data === 'string') {
+          rawContent = row.data;
+        } else if (typeof row.data === 'object' && row.data !== null) {
+          rawContent = JSON.stringify(row.data, null, 2);
+        }
+        if (rawContent.trim()) {
+          addSection({
+            type: 'raw_data',
+            slug: hit.slug,
+            title: hit.title,
+            content: rawContent,
+            label: `原始文档 (${row.source})`,
+          });
+          stats.rawDocs++;
+        }
+      }
+    } catch {
+      // Raw data fetch failure is non-fatal
+    }
+  }
+
+  // Layer 3: Linked pages — SEMANTICALLY SCORED against the question
+  // Only include linked pages that are actually relevant to what the user asked.
+  const allLinkedSlugs = new Set<string>();
+  for (const hit of hits) {
+    try {
+      const outLinks = await repo.outgoingLinks(hit.slug);
+      outLinks.forEach(l => allLinkedSlugs.add(l.slug));
+    } catch { /* ignore */ }
+    try {
+      const backlinkSlugs = await repo.backlinks(hit.slug);
+      backlinkSlugs.forEach(s => allLinkedSlugs.add(s));
+    } catch { /* ignore */ }
+  }
+
+  if (allLinkedSlugs.size > 0) {
+    // Score linked pages using broad semantic search.
+    // Query a wide set of pages, then intersect with linked slugs.
+    const broadLimit = Math.min(200, Math.max(50, allLinkedSlugs.size));
+    const broadResults = await repo.query(question, broadLimit);
+    const semanticScoreMap = new Map(broadResults.map(h => [h.slug, h.score]));
+
+    // Keyword-based fallback scoring for linked pages without embedding scores
+    const keywordScores = new Map<string, number>();
+    for (const linkedSlug of allLinkedSlugs) {
+      if (semanticScoreMap.has(linkedSlug)) continue;
+      try {
+        const page = await repo.getPage(linkedSlug);
+        if (page) {
+          const text = `${page.title} ${page.compiledTruth}`.slice(0, 2000);
+          keywordScores.set(linkedSlug, computeKeywordRelevance(text, question));
+        }
+      } catch { /* ignore */ }
+    }
+
+    // Combine scores: semantic first, then keyword fallback
+    const scoredLinked = [...allLinkedSlugs].map(slug => ({
+      slug,
+      score: semanticScoreMap.get(slug) ?? keywordScores.get(slug) ?? 0,
+    }));
+
+    // Filter: only include linked pages with meaningful relevance
+    const MIN_LINKED_SCORE = 0.02;
+    const relevantLinked = scoredLinked
+      .filter(s => s.score >= MIN_LINKED_SCORE)
+      .sort((a, b) => b.score - a.score);
+
+    // Fetch content for relevant linked pages (respecting budget)
+    for (const linked of relevantLinked) {
+      if (totalChars >= maxChars) break;
+
+      const linkedPage = await repo.getPage(linked.slug);
+      if (!linkedPage || !linkedPage.compiledTruth?.trim()) continue;
+
+      const remaining = maxChars - totalChars;
+      let content = linkedPage.compiledTruth.trim();
+      if (content.length > remaining - 100) {
+        content = content.slice(0, remaining - 100) + '\n...[truncated]';
+      }
+
+      addSection({
+        type: 'linked',
+        slug: linkedPage.slug,
+        title: linkedPage.title,
+        content,
+        label: `关联页面: ${linkedPage.slug} (相关度: ${(linked.score * 100).toFixed(1)}%)`,
+      });
+      stats.linkedPages++;
+
+      // Also fetch raw data for highly relevant linked pages
+      if (linked.score > 0.1) {
+        try {
+          const rawRows = await repo.readRaw(linked.slug) as Array<{ source: string; data: unknown }>;
+          for (const row of rawRows) {
+            let rawContent = typeof row.data === 'string' ? row.data : JSON.stringify(row.data);
+            if (rawContent.trim().length > 100) {
+              const remaining2 = maxChars - totalChars;
+              if (rawContent.length > remaining2 - 100) {
+                rawContent = rawContent.slice(0, remaining2 - 100) + '\n...[truncated]';
+              }
+              addSection({
+                type: 'raw_data',
+                slug: linked.slug,
+                title: linkedPage.title,
+                content: rawContent,
+                label: `原始文档 (关联: ${row.source})`,
+              });
+              stats.rawDocs++;
+            }
+          }
+        } catch { /* ignore */ }
+      }
+    }
+  }
+
+  return { sections, totalChars, stats };
+}
+
+/**
+ * Simple keyword-based relevance scoring (fallback for pages without embeddings).
+ * Computes the fraction of unique meaningful characters from the question
+ * that appear in the text.
+ */
+function computeKeywordRelevance(text: string, question: string): number {
+  const STOP_CHARS = new Set('的是了在和我有你就这不人都说上个大国为到以们年会生地要主中子自实家小对多能好可很所把当');
+  const questionChars = [...question]
+    .filter(c => !/\s|[,，。！？、；:：""''（）()【】\[\]{}<>\/\\|~`@#$%^&*+=_-]/.test(c) && !STOP_CHARS.has(c));
+  if (questionChars.length === 0) return 0;
+
+  const uniqueChars = new Set(questionChars);
+  const lower = text.toLowerCase();
+  let matched = 0;
+  for (const char of uniqueChars) {
+    if (lower.includes(char.toLowerCase())) matched++;
+  }
+  return matched / uniqueChars.size;
+}
+
+interface ContextStats {
+  primaryPages: number;
+  rawDocs: number;
+  linkedPages: number;
+  skippedChars: number;
+}
+
+/**
+ * Build LLM prompt from collected context sections and generate answer.
+ */
+async function generateAnswerWithContext(
+  question: string,
+  sections: ContextSection[],
+  stats: ContextStats,
   llm: ResolvedLLM,
 ): Promise<string> {
   const apiKey = llm.apiKey || process.env[llm.apiKeyEnv] || "";
@@ -1642,29 +1886,54 @@ async function generateAnswerFromExcerpts(
     return "Error: LLM API key not configured.";
   }
 
-  // Build context from page excerpts
-  const context = pages
-    .map((p, i) => {
-      return `## Source ${i + 1}: ${p.title}\n**Slug:** ${p.slug}\n\n${p.excerpt}`;
-    })
-    .join("\n\n---\n\n");
+  if (sections.length === 0) {
+    return "知识库中没有找到相关内容。";
+  }
 
-  const prompt = `You are answering a question based on the provided knowledge base context.
+  // Build context sections with clear labels
+  const contextParts: string[] = [];
+  let sectionIndex = 0;
 
-## Question
+  // Group by type for cleaner output
+  const primarySections = sections.filter(s => s.type === 'primary');
+  const rawSections = sections.filter(s => s.type === 'raw_data');
+  const linkedSections = sections.filter(s => s.type === 'linked');
+
+  function renderSections(group: ContextSection[], header: string) {
+    if (group.length === 0) return;
+    contextParts.push(`## ${header}\n`);
+    for (const s of group) {
+      sectionIndex++;
+      contextParts.push(`### [${sectionIndex}] ${s.title} — ${s.label}\n**Slug:** ${s.slug}\n\n${s.content}\n`);
+    }
+    contextParts.push('');
+  }
+
+  renderSections(primarySections, '页面正文');
+  renderSections(rawSections, '原始文档');
+  renderSections(linkedSections, '关联页面');
+
+  const context = contextParts.join('\n');
+
+  const prompt = `你是一个知识库助手，请根据提供的知识库内容回答问题。
+
+## 问题
 ${question}
 
-## Context from Knowledge Base
-${context || "(No relevant pages found)"}
+## 知识库内容
 
-## Instructions
-- Answer the question based ONLY on the provided context
-- If the context doesn't contain enough information, say so
-- Cite sources using markdown links like [Title](slug) when referencing specific information
-- Format your answer in clean markdown
-- Be concise but comprehensive
+${context}
 
-## Answer`;
+## 回答要求
+- 仅基于提供的知识库内容回答，不要编造信息
+- 如果知识库中没有相关信息，请明确说明
+- 引用来源时使用 [[slug|标题]] 的格式
+- 使用清晰的 markdown 格式
+- 如果涉及时间线信息，请在回答中体现
+- 区分哪些信息来自「页面正文」、哪些来自「原始文档」、哪些来自「关联页面」
+- 语言与提问保持一致（中文提问用中文回答，英文提问用英文回答）
+
+## 回答`;
 
   try {
     const resp = await fetch(
@@ -1680,12 +1949,12 @@ ${context || "(No relevant pages found)"}
           messages: [
             {
               role: "system",
-              content: "You are a helpful assistant that answers questions based on a knowledge base. Always cite your sources.",
+              content: "你是一个专业的知识库助手，基于提供的知识库内容准确回答问题。引用来源时使用 [[slug|标题]] 格式。回答要条理清晰，区分信息来源。",
             },
             { role: "user", content: prompt },
           ],
           temperature: 0.3,
-          max_tokens: 2048,
+          max_tokens: 4096,
         }),
       },
     );

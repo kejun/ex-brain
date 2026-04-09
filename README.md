@@ -65,6 +65,13 @@ ebrain timeline extract companies/river-ai
 ebrain search "some topic"
 ebrain query "some question"
 
+# AI-powered Q&A with LLM (RAG)
+ebrain query --llm "What is the main idea of River AI's product?"
+ebrain query --llm "What are Mario Zechner's main views on game development?"
+
+# Smart ingest: compile + timeline + entity links in one command
+ebrain smart-ingest companies/river-ai --file article.md
+
 # Start MCP Server (for AI tool integration)
 ebrain serve
 ```
@@ -82,11 +89,52 @@ Edit `~/.ebrain/settings.json`:
     "model": "...",
     "dimensions": 1024,
     "apiKey": "sk-..."
+  },
+  "llm": {
+    "baseURL": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "model": "qwen-plus",
+    "apiKey": "sk-..."
+  },
+  "extraction": {
+    "confidenceThreshold": 0.7   // Entity extraction confidence (0~1)
   }
 }
 ```
 
 Run `ebrain config` to view active configuration. See [docs/ebrain-cli.md](docs/ebrain-cli.md) for details.
+
+## AI Q&A (RAG)
+
+Ask natural language questions and get answers based on your knowledge base:
+
+```bash
+# Basic Q&A
+ex-brain query --llm "What is the main idea of River AI's product?"
+
+# Control context depth
+ebrain query --llm "What happened in Q4?" --context-limit 3
+```
+
+How it works:
+
+1. **Semantic Search** — Finds top matching pages for your question
+2. **Multi-Layer Context Collection** — Builds rich context from:
+   - **Page Content** — Compiled truth + timeline for each matched page
+   - **Raw Documents** — Original imported documents (via `raw set`)
+   - **Linked Pages** — Incoming and outgoing linked pages, filtered by semantic relevance to the question
+3. **LLM Synthesis** — Generates a sourced answer with `[[slug|title]]` citations
+
+Configure LLM in `~/.ebrain/settings.json`:
+
+```json
+{
+  "llm": {
+    "baseURL": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "model": "qwen-plus",
+    "apiKey": "sk-..."
+  }
+}
+```
 
 ## Development
 

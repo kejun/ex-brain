@@ -73,14 +73,14 @@ export class BrainDb {
         // Check if it's a connection error that might be resolved by reconnecting
         if (wrappedError.category === DbErrorCategory.CONNECTION) {
           console.warn(
-            `[DB] Connection error on attempt ${attempt}/${MAX_RETRY_ATTEMPTS}, retrying...`,
+            `\x1b[33m[DB]\x1b[0m Connection error on attempt ${attempt}/${MAX_RETRY_ATTEMPTS}, retrying...`,
           );
           await this.attemptReconnect();
         } else {
           // Exponential backoff for other retryable errors
           const delay = RETRY_DELAY_MS * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1);
           console.warn(
-            `[DB] ${operationName} failed on attempt ${attempt}/${MAX_RETRY_ATTEMPTS}, retrying in ${delay}ms...`,
+            `\x1b[33m[DB]\x1b[0m ${operationName} failed on attempt ${attempt}/${MAX_RETRY_ATTEMPTS}, retrying in ${delay}ms...`,
           );
           await this.sleep(delay);
         }
@@ -96,7 +96,7 @@ export class BrainDb {
       await this.client.execute("SELECT 1");
       this._isConnected = true;
       this._lastConnectedAt = new Date();
-      console.error("[DB] Reconnected successfully");
+      console.error("\x1b[32m[DB] Reconnected successfully\x1b[0m");
     } catch {
       // Connection still failed, will retry on next operation
       this._isConnected = false;
@@ -130,11 +130,11 @@ export class BrainDb {
       const db = new BrainDb(dbPath, client, pagesCollection);
       db._isConnected = true;
       db._lastConnectedAt = new Date();
-      console.error("[DB] Connected successfully");
+      console.error("\x1b[32m[DB] Connected successfully\x1b[0m");
       return db;
     } catch (error) {
       const wrappedError = wrapDbError(error, "connect");
-      console.error("[DB] Connection failed:", wrappedError.toJSON());
+      console.error(`\x1b[31m[DB]\x1b[0m Connection failed:`, wrappedError.toJSON());
       throw wrappedError;
     }
   }
@@ -197,10 +197,10 @@ export class BrainDb {
     try {
       await this.client.close();
       this._isConnected = false;
-      console.error("[DB] Disconnected");
+      console.error("\x1b[32m[DB] Disconnected\x1b[0m");
     } catch (error) {
       const wrappedError = wrapDbError(error, "close");
-      console.error("[DB] Error closing connection:", wrappedError.message);
+      console.error(`\x1b[31m[DB]\x1b[0m Error closing connection:`, wrappedError.message);
       // Don't throw on close errors - best effort
     }
   }

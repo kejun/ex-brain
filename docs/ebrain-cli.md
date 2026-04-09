@@ -50,6 +50,9 @@ bun run src/cli.ts --help
     "model": "qwen-plus",
     "apiKey": "",                           // 直接写 key（不建议，留空走 apiKeyEnv）
     "apiKeyEnv": "DASHSCOPE_API_KEY"        // 从环境变量读取 key
+  },
+  "extraction": {
+    "confidenceThreshold": 0.7              // 实体提取置信度阈值 (0~1)，低于此值的关系将被忽略
   }
 }
 ```
@@ -76,6 +79,7 @@ bun run src/cli.ts --help
 | `EBRAIN_EMBED_DIMENSIONS` | 输出维度 |
 | `EBRAIN_EMBED_API_KEY` | 直接写入 Key |
 | `EBRAIN_EMBED_API_KEY_ENV` | Key 所在环境变量名（默认 `DASHSCOPE_API_KEY`） |
+| `EBRAIN_CONFIDENCE_THRESHOLD` | 实体提取置信度阈值 (0~1，默认 `0.7`) |
 
 ### 嵌入服务（embedding）
 
@@ -91,10 +95,47 @@ bun run src/cli.ts --help
 - `llm.apiKey` / `llm.apiKeyEnv`：密钥配置方式与 embed 相同。
 - 嵌入（embed）和 LLM 使用**独立的 baseURL 和 API Key**，互不干扰。
 
+### 实体提取配置
+
+- `extraction.confidenceThreshold`：实体关系置信度阈值（0~1），默认 `0.7`。
+  - LLM 提取的实体关系置信度低于此值时将被忽略。
+  - 可通过环境变量 `EBRAIN_CONFIDENCE_THRESHOLD` 覆盖。
+  - 调高 → 更精准但可能遗漏实体；调低 → 更全面但可能产生误报。
+
+### 智能编译（Intelligent Compile）
+
+`ebrain compile` 和 `ebrain smart-ingest` 提供智能化的知识录入流程：
+
+- **`ebrain compile <slug> <info>`**：将新信息智能编译到指定页面的 `compiled truth` 中，自动合并、去重、更新。
+- **`ebrain smart-ingest [slug]`**：完整智能录入流程，依次执行：
+  1. 编译 truth（智能合并信息到页面）
+  2. 提取时间线事件（自动识别日期和关键事件）
+  3. 创建实体链接（自动识别相关实体并建立关联页面）
+
+两个命令都依赖 LLM 配置，未配置时会跳过 AI 步骤并给出提示。
+
+### `query --llm` 多层上下文
+
+`ebrain query --llm "问题"` 使用多层上下文构建丰富的检索结果：
+
+1. **语义搜索** — 找到与问题最匹配的页面
+2. **多层上下文收集**：
+   - **页面内容** — 每个匹配页面的 compiled truth + timeline
+   - **原始文档** — 通过 `raw set` 存储的原始导入文档
+   - **关联页面** — 入链和出链页面，按与问题的语义相关性过滤
+3. **LLM 合成** — 生成带 `[[slug|title]]` 引用的来源标注回答
+
+使用 `--context-limit N` 控制纳入上下文的页面数量（默认 5）。
+
 ### 嵌入进程退出码（macOS 等）
 
 - `seekdb` 嵌入原生库在**进程退出**时可能返回 **139 (SIGSEGV)**，但 JSON 输出仍完整。
 - 若需稳定 **0 退出码**，请改用远程库（设置 `EBRAIN_SEEKDB_HOST` 或 settings.json 中的 `db.remote.host`）。
+
+### 查询安全（Query Sanitizer）
+
+- 所有搜索查询在进入 seekdb 前会自动清理特殊字符（单引号、双引号、反斜杠、控制字符等），防止 JSON 解析错误。
+- 当向量搜索失败时，自动回退到 SQL LIKE 搜索，确保操作不中断。
 
 构建单文件 bundle（可选，仅用于本地调试）：
 
@@ -106,29 +147,33 @@ bun run dist/cli.js --help
 ## 核心命令
 
 - `ebrain config` — 查看当前生效的配置
-- `ebrain put <slug> --file <path>`（也支持 `--stdin`，幂等 upsert）
+- `ebrain put <slug> --file <path>`（也支持 `--stdin`，幂等 upsert；省略 slug 时自动生成）
 - `ebrain get <slug>`（`--json` 输出结构化数据）
-- `ebrain delete <slug>`（新增，支持 `--dry-run`）
+- `ebrain delete <slug>`（支持 `--dry-run` 预览删除影响）
 - `ebrain list [--type person] [--tag yc]`
 - `ebrain search <query>`
-- `ebrain query <question>`
+- `ebrain query <question>`（支持 `--llm` 基于多层上下文生成回答，`--context-limit N` 控制上下文深度）
 - `ebrain link <from> <to> [--context "..."]`（幂等）
 - `ebrain backlinks <slug>`
 - `ebrain timeline list <slug>`
 - `ebrain timeline add <slug> --date YYYY-MM-DD --summary "..."`
+- `ebrain timeline extract <slug>` — 从页面内容智能提取时间线事件
 - `ebrain tag list <slug>`
 - `ebrain tag add <slug> <tag>`（幂等）
 - `ebrain tag remove <slug> <tag>`
 - `ebrain raw get <slug> [--source x]`
 - `ebrain raw set <slug> --source x --data '{"a":1}'`（也支持 `--stdin`）
-- `ebrain import <dir>`（支持 `--dry-run` 预览）
+- `ebrain import <dir>`（支持 `--dry-run` 预览；`--skip-index` 跳过向量索引以避免 seekdb 崩溃）
 - `ebrain export --dir <dir>`
 - `ebrain ingest [file] [--type doc]`（支持 `--stdin`）
 - `ebrain embed <slug>` / `ebrain embed --all`
 - `ebrain init`
 - `ebrain stats`
-- `ebrain serve`
-- `ebrain tools-json`
+- `ebrain compile <slug> <info>` — 智能编译新信息到页面的 compiled truth
+- `ebrain smart-ingest [slug]` — 完整智能录入：编译 truth + 提取时间线 + 创建实体链接
+- `ebrain graph [--port N] [--open]` — 启动知识图谱可视化 Web UI
+- `ebrain serve` — 启动 MCP Server（stdio 模式，供 AI 工具集成）
+- `ebrain tools-json` — 打印 MCP 工具发现 JSON
 
 > 旧命令名 `timeline`、`timeline-add`、`tags`、`tag`、`untag` 保留为隐藏别名，向后兼容。
 
