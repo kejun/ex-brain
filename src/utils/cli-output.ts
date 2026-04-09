@@ -394,9 +394,13 @@ export interface ProgressSpinner {
   fail(message?: string): void;
   warn(message?: string): void;
   stop(): void;
+  nativeError(message?: string): void;
 }
 
 export function createSpinner(stream: OutputStream = defaultStderr): ProgressSpinner {
+  // Allow disabling spinner via env var for debugging native errors
+  const noSpinner = process.env.EBRAIN_NO_SPINNER === '1' || process.env.EBRAIN_NO_SPINNER === 'true';
+  
   let frameIndex = 0;
   let interval: Timer | null = null;
   let currentMessage = '';
@@ -419,14 +423,22 @@ export function createSpinner(stream: OutputStream = defaultStderr): ProgressSpi
     currentMessage = message;
     isRunning = true;
     frameIndex = 0;
-    render();
-    interval = setInterval(render, SPINNER_INTERVAL);
+    
+    if (noSpinner) {
+      // No spinner mode: just print the message
+      stream.write(`${COLORS.cyan}${ICONS.working}${COLORS.reset} ${message}\n`);
+    } else {
+      render();
+      interval = setInterval(render, SPINNER_INTERVAL);
+    }
   }
 
   function update(message: string): void {
     currentMessage = message;
     if (!isRunning) {
       start(message);
+    } else if (noSpinner) {
+      stream.write(`${COLORS.cyan}${ICONS.working}${COLORS.reset} ${message}\n`);
     }
   }
 
@@ -436,6 +448,7 @@ export function createSpinner(stream: OutputStream = defaultStderr): ProgressSpi
       interval = null;
     }
     if (isRunning) {
+      // Clear the spinner line completely so native errors show on new line
       clearLine();
       isRunning = false;
     }
@@ -458,8 +471,21 @@ export function createSpinner(stream: OutputStream = defaultStderr): ProgressSpi
     const text = message || currentMessage;
     stream.write(`\x1b[33m${ICONS.warning}\x1b[0m ${text}\n`);
   }
+  
+  /**
+   * Stop spinner and show native error output
+   */
+  function nativeError(message?: string): void {
+    stop();
+    // Print a blank line first so native stderr output is visible
+    stream.write('\n');
+    if (message) {
+      stream.write(`\x1b[31m${ICONS.error}\x1b[0m ${message}\n`);
+    }
+    stream.write(`${COLORS.dim}(Native library error output above)${COLORS.reset}\n`);
+  }
 
-  return { start, update, succeed, fail, warn, stop };
+  return { start, update, succeed, fail, warn, stop, nativeError };
 }
 
 // ============================================================================

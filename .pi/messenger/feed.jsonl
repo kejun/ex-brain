@@ -179,3 +179,10 @@
 {"ts":"2026-04-09T05:10:05.501Z","type":"edit","agent":"SageGrove","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/index.ts"}
 {"ts":"2026-04-09T05:10:27.263Z","type":"edit","agent":"SageGrove","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/index.ts"}
 {"ts":"2026-04-09T05:10:49.580Z","type":"edit","agent":"SageGrove","target":"/Users/kejun/Desktop/repos/ex-brain/src/commands/index.ts"}
+{"ts":"2026-04-09T05:15:23.291Z","type":"commit","agent":"SageGrove","preview":"feat(cli): 优化 CLI 交互界面 - 新增 src/utils/cli-output.ts 统一 CLI 输出模块 - 成功提示用绿色 (✓)，错误用红色 (✗)，警告用黄色 (⚠) - 每项任务显示 spinner 动画，完成后变成 [done] 状态 - 详细展示每一步的成功、失败、warning 信息 - 更新 applyEntityLinks、import、put、delete、ingest、embed、stats 等命令 - 支持进度条、任务追踪、格式化输出等高级功能"}
+{"ts":"2026-04-09T06:15:50.784Z","type":"edit","agent":"SageGrove","target":"/Users/kejun/Desktop/repos/ex-brain/src/utils/cli-output.ts"}
+{"ts":"2026-04-09T06:16:03.298Z","type":"edit","agent":"SageGrove","target":"/Users/kejun/Desktop/repos/ex-brain/src/utils/cli-output.ts"}
+{"ts":"2026-04-09T06:16:44.032Z","type":"edit","agent":"SageGrove","target":"/Users/kejun/Desktop/repos/ex-brain/src/utils/cli-output.ts"}
+{"ts":"2026-04-09T06:17:09.079Z","type":"edit","agent":"SageGrove","target":"/Users/kejun/Desktop/repos/ex-brain/src/utils/cli-output.ts"}
+{"ts":"2026-04-09T06:17:29.207Z","type":"edit","agent":"SageGrove","target":"/Users/kejun/Desktop/repos/ex-brain/src/utils/cli-output.ts"}
+{"ts":"2026-04-09T06:17:53.843Z","type":"edit","agent":"SageGrove","target":"/Users/kejun/Desktop/repos/ex-brain/CHANGELOG.md"}
