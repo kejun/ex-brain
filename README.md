@@ -109,7 +109,7 @@ Ask natural language questions and get answers based on your knowledge base:
 
 ```bash
 # Basic Q&A
-ex-brain query --llm "What is the main idea of River AI's product?"
+ebrain query --llm "What is the main idea of River AI's product?"
 
 # Control context depth
 ebrain query --llm "What happened in Q4?" --context-limit 3
