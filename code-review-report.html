@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=devicewidth, initial-scale=1.0">
+  <title>Ex-Brain 代码审查报告</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600&family=JetBrains+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --font-body: 'Noto Serif SC', Georgia, serif;
+      --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+      --font-sans: 'DM Sans', system-ui, -apple-system, sans-serif;
+      
+      --bg: #faf9f7;
+      --surface: #ffffff;
+      --surface2: #f3f1ee;
+      --border: rgba(0, 0, 0, 0.06);
+      --border-bright: rgba(0, 0, 0, 0.12);
+      --text: #1a1a1a;
+      --text-dim: #6b6b6b;
+      --accent: #0d9488;
+      --accent-dim: rgba(13, 148, 136, 0.08);
+      --green: #16a34a;
+      --green-dim: rgba(22, 163, 74, 0.08);
+      --red: #dc2626;
+      --red-dim: rgba(220, 38, 38, 0.08);
+      --orange: #d97706;
+      --orange-dim: rgba(217, 119, 6, 0.08);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f1414;
+        --surface: #1a2121;
+        --surface2: #242e2e;
+        --border: rgba(255, 255, 255, 0.05);
+        --border-bright: rgba(255, 255, 255, 0.1);
+        --text: #e8ecec;
+        --text-dim: #9ca3af;
+        --accent: #2dd4bf;
+        --accent-dim: rgba(45, 212, 191, 0.1);
+        --green: #4ade80;
+        --green-dim: rgba(74, 222, 128, 0.1);
+        --red: #f87171;
+        --red-dim: rgba(248, 113, 113, 0.1);
+        --orange: #fbbf24;
+        --orange-dim: rgba(251, 191, 36, 0.1);
+      }
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      background-image:
+        radial-gradient(ellipse at 10% 0%, var(--accent-dim) 0%, transparent 50%),
+        radial-gradient(ellipse at 90% 100%, var(--green-dim) 0%, transparent 40%);
+      color: var(--text);
+      font-family: var(--font-sans);
+      padding: 40px;
+      min-height: 100vh;
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .animate {
+      animation: fadeUp 0.4s ease-out both;
+      animation-delay: calc(var(--i, 0) * 0.05s);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-delay: 0ms !important;
+      }
+    }
+
+    .container { max-width: 1100px; margin: 0 auto; }
+
+    h1 {
+      font-family: var(--font-body);
+      font-size: 36px;
+      font-weight: 600;
+      letter-spacing: -0.5px;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      color: var(--text-dim);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      margin-bottom: 36px;
+    }
+
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+
+    .kpi-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+    }
+
+    .kpi-card__value {
+      font-family: var(--font-body);
+      font-size: 38px;
+      font-weight: 600;
+      line-height: 1.1;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .kpi-card__value--red { color: var(--red); }
+    .kpi-card__value--orange { color: var(--orange); }
+    .kpi-card__value--green { color: var(--green); }
+
+    .kpi-card__label {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+      margin-top: 8px;
+    }
+
+    .section-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-dim);
+      margin-bottom: 16px;
+      margin-top: 32px;
+    }
+
+    .section-label::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    .section-label--red::before { background: var(--red); }
+    .section-label--orange::before { background: var(--orange); }
+    .section-label--green::before { background: var(--green); }
+
+    .table-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 20px;
+    }
+
+    .table-scroll { overflow-x: auto; }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .data-table thead {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+
+    .data-table th {
+      background: var(--surface2);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+      text-align: left;
+      padding: 14px 18px;
+      border-bottom: 2px solid var(--border-bright);
+      white-space: nowrap;
+    }
+
+    .data-table td {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    .data-table tbody tr:last-child td { border-bottom: none; }
+
+    .data-table .wide { min-width: 200px; }
+
+    .data-table tbody tr:nth-child(even) { background: var(--accent-dim); }
+    
+    .data-table tbody tr {
+      transition: background 0.15s ease;
+      animation: fadeUp 0.35s ease-out both;
+    }
+
+    .data-table tbody tr:hover { background: var(--border); }
+
+    .data-table code {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      background: var(--accent-dim);
+      color: var(--accent);
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+
+    .data-table small {
+      display: block;
+      color: var(--text-dim);
+      font-size: 11px;
+      margin-top: 4px;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 6px;
+      white-space: nowrap;
+      letter-spacing: 0.3px;
+    }
+
+    .status--critical { background: var(--red-dim); color: var(--red); }
+    .status--major { background: var(--orange-dim); color: var(--orange); }
+    .status--minor { background: var(--green-dim); color: var(--green); }
+
+    .status::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .data-table tfoot td {
+      background: var(--surface2);
+      font-weight: 600;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      border-top: 2px solid var(--border-bright);
+      padding: 14px 18px;
+    }
+
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+    }
+
+    .card__title {
+      font-family: var(--font-body);
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card__title::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    .card__title--red::before { background: var(--red); }
+    .card__title--green::before { background: var(--green); }
+    .card__title--orange::before { background: var(--orange); }
+
+    .card ul {
+      margin-left: 18px;
+      color: var(--text-dim);
+      font-size: 13px;
+      line-height: 1.8;
+    }
+
+    .card li { margin-bottom: 4px; }
+
+    .card code {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      background: var(--accent-dim);
+      color: var(--accent);
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+
+    .timeline {
+      position: relative;
+      padding-left: 30px;
+      margin: 24px 0;
+    }
+
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 8px;
+      top: 8px;
+      bottom: 8px;
+      width: 2px;
+      background: var(--border-bright);
+    }
+
+    .timeline-item {
+      position: relative;
+      margin-bottom: 24px;
+      padding-left: 16px;
+    }
+
+    .timeline-item::before {
+      content: '';
+      position: absolute;
+      left: -26px;
+      top: 6px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: 3px solid var(--bg);
+    }
+
+    .timeline-item--past::before { background: var(--text-dim); }
+
+    .timeline-item__title {
+      font-weight: 600;
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+
+    .timeline-item__desc {
+      color: var(--text-dim);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .tag {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 500;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: var(--accent-dim);
+      color: var(--accent);
+      margin-right: 6px;
+    }
+
+    @media (max-width: 768px) {
+      body { padding: 16px; }
+      h1 { font-size: 26px; }
+      .data-table th, .data-table td { padding: 10px 12px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+
+  <h1 class="animate" style="--i:0">Ex-Brain 深度代码审查报告</h1>
+  <p class="subtitle animate" style="--i:1">整合 task-2, task-3, task-4, task-5 审查结果 &mdash; 2026-04-09</p>
+
+  <!-- KPI Summary -->
+  <div class="kpi-row animate" style="--i:2">
+    <div class="kpi-card">
+      <div class="kpi-card__value">55</div>
+      <div class="kpi-card__label">问题总数</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-card__value kpi-card__value--red">18</div>
+      <div class="kpi-card__label">🔴 Critical</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-card__value kpi-card__value--orange">18</div>
+      <div class="kpi-card__label">🟠 Major</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-card__value kpi-card__value--green">19</div>
+      <div class="kpi-card__label">🟡 Minor</div>
+    </div>
+  </div>
+
+  <!-- 问题汇总表 -->
+  <div class="section-label animate" style="--i:3">问题汇总 (按模块)</div>
+  
+  <div class="table-wrap animate" style="--i:4">
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>审查维度</th>
+            <th>Critical</th>
+            <th>Major</th>
+            <th>Minor</th>
+            <th>状态</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="--i:5">
+            <td>智能编译 <code>compiler.ts</code></td>
+            <td><span class="status status--critical">2</span></td>
+            <td><span class="status status--major">5</span></td>
+            <td><span class="status status--minor">8</span></td>
+            <td>✅ 完成</td>
+          </tr>
+          <tr style="--i:6">
+            <td>实体链接 & 时间线</td>
+            <td><span class="status status--critical">7</span></td>
+            <td><span class="status status--major">7</span></td>
+            <td><span class="status status--minor">6</span></td>
+            <td>✅ 完成</td>
+          </tr>
+          <tr style="--i:7">
+            <td>性能瓶颈</td>
+            <td><span class="status status--critical">4</span></td>
+            <td><span class="status status--major">2</span></td>
+            <td><span class="status status--minor">2</span></td>
+            <td>✅ 完成</td>
+          </tr>
+          <tr style="--i:8">
+            <td>错误处理 & 可恢复性</td>
+            <td><span class="status status--critical">5</span></td>
+            <td><span class="status status--major">4</span></td>
+            <td><span class="status status--minor">3</span></td>
+            <td>✅ 完成</td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td>4 项审查</td>
+            <td>18 Critical</td>
+            <td>18 Major</td>
+            <td>19 Minor</td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  <!-- Critical 问题列表 -->
+  <div class="section-label section-label--red animate" style="--i:9">🔴 Critical 问题 (需立即修复)</div>
+
+  <div class="table-wrap animate" style="--i:10">
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th class="wide">问题描述</th>
+            <th>影响模块</th>
+            <th>严重度</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="--i:11">
+            <td><code>C-1</code></td>
+            <td><span class="tag">智能编译</span> <code>changeType</code> 映射丢失，导致更新类型数据丢失</td>
+            <td>compiler.ts</td>
+            <td><span class="status status--critical">Critical</span></td>
+          </tr>
+          <tr style="--i:12">
+            <td><code>C-2</code></td>
+            <td><span class="tag">智能编译</span> Timeline 提取过度依赖分析成功，<code>analyzeNewInfo</code> 失败时完全不提取</td>
+            <td>compiler.ts</td>
+            <td><span class="status status--critical">Critical</span></td>
+          </tr>
+          <tr style="--i:13">
+            <td><code>C-3</code></td>
+            <td><span class="tag">实体链接</span> 无置信度阈值过滤，接受任何置信度关系，引入噪音数据</td>
+            <td>entity-link.ts</td>
+            <td><span class="status status--critical">Critical</span></td>
+          </tr>
+          <tr style="--i:14">
+            <td><code>C-4</code></td>
+            <td><span class="tag">实体链接</span> 内容截断破坏上下文 (4000+1000 可能切断实体)</td>
+            <td>entity-link.ts</td>
+            <td><span class="status status--critical">Critical</span></td>
+          </tr>
+          <tr style="--i:15">
+            <td><code>C-5</code></td>
+            <td><span class="tag">实体链接</span> 无重试机制，API 失败直接返回空</td>
+            <td>entity-link.ts</td>
+            <td><span class="status status--critical">Critical</span></td>
+          </tr>
+          <tr style="--i:16">
+            <td><code>C-6</code></td>
+            <td><span class="tag">时间线</span> 重要性评分 <code>importance</code> 字段未持久化，无实际作用</td>
+            <td>timeline-extractor.ts</td>
+            <td><span class="status status--critical">Critical</span></td>
+          </tr>
+          <tr style="--i:17">
+            <td><code>C-7</code></td>
+            <td><span class="tag">时间线</span> 日期解析覆盖率不足，缺少 Q1 2024、周数、季节等格式</td>
+            <td>timeline-extractor.ts</td>
+            <td><span class="status status--critical">Critical</span></td>
+          </tr>
+          <tr style="--i:18">
+            <td><code>P-1</code></td>
+            <td><span class="tag">性能</span> <code>embedAll</code> 串行处理，未使用批量方法，10x+ 性能损失</td>
+            <td>brain-repo.ts</td>
+            <td><span class="status status--critical">Critical</span></td>
+          </tr>
+          <tr style="--i:19">
+            <td><code>P-2</code></td>
+            <td><span class="tag">性能</span> <code>applyEntityLinks</code> 串行循环，每关系 5-7 次 DB 调用</td>
+            <td>commands/index.ts</td>
+            <td><span class="status status--critical">Critical</span></td>
+          </tr>
+          <tr style="--i:20">
+            <td><code>P-3</code></td>
+            <td><span class="tag">性能</span> <code>putPage</code> 每次立即 sync，导致大量重复 I/O</td>
+            <td>brain-repo.ts</td>
+            <td><span class="status status--critical">Critical</span></td>
+          </tr>
+          <tr style="--i:21">
+            <td><code>P-4</code></td>
+            <td><span class="tag">性能</span> <code>syncPageToSearch</code> 8000 字符截断可能丢失关键信息</td>
+            <td>brain-repo.ts</td>
+            <td><span class="status status--critical">Critical</span></td>
+          </tr>
+          <tr style="--i:22">
+            <td><code>E-1</code></td>
+            <td><span class="tag">错误处理</span> LLM 调用静默失败，返回空字符串，无法区分错误类型</td>
+            <td>compiler.ts</td>
+            <td><span class="status status--critical">Critical</span></td>
+          </tr>
+          <tr style="--i:23">
+            <td><code>E-2</code></td>
+            <td><span class="tag">错误处理</span> 无重试机制，临时网络抖动导致直接失败</td>
+            <td>compiler.ts</td>
+            <td><span class="status status--critical">Critical</span></td>
+          </tr>
+          <tr style="--i:24">
+            <td><code>E-3</code></td>
+            <td><span class="tag">错误处理</span> 数据库连接无错误处理，连接失败无重试</td>
+            <td>client.ts</td>
+            <td><span class="status status--critical">Critical</span></td>
+          </tr>
+          <tr style="--i:25">
+            <td><code>E-4</code></td>
+            <td><span class="tag">错误处理</span> 所有 SQL 操作无错误处理，数据库错误导致命令失败</td>
+            <td>brain-repo.ts</td>
+            <td><span class="status status--critical">Critical</span></td>
+          </tr>
+          <tr style="--i:26">
+            <td><code>E-5</code></td>
+            <td><span class="tag">错误处理</span> MCP 20+ 工具无错误处理，工具错误导致协议崩溃</td>
+            <td>mcp/server.ts</td>
+            <td><span class="status status--critical">Critical</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 改进路线图 -->
+  <div class="section-label section-label--green animate" style="--i:27">📋 改进路线图</div>
+
+  <div class="card-grid animate" style="--i:28">
+    <div class="card">
+      <div class="card__title card__title--red">阶段 1: 核心修复 (1-2 周)</div>
+      <ul>
+        <li>修复 <code>changeType</code> 映射丢失</li>
+        <li>添加 LLM 重试机制 + 错误分类</li>
+        <li>添加数据库操作错误处理</li>
+        <li>MCP 工具全局错误处理</li>
+        <li><code>embedAll</code> 使用批量方法 (10x+)</li>
+        <li><code>applyEntityLinks</code> 并行化 (5x+)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card__title card__title--orange">阶段 2: 能力提升 (2-4 周)</div>
+      <ul>
+        <li>置信度阈值过滤 (0.7+)</li>
+        <li>实体关系去重</li>
+        <li>持久化 <code>importance</code> 字段</li>
+        <li>扩展日期解析格式</li>
+        <li>动态 batch size</li>
+        <li>缓存策略实施</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card__title card__title--green">阶段 3: 优化扩展 (1-2 月)</div>
+      <ul>
+        <li>批量 LLM 调用优化</li>
+        <li>结构化日志系统</li>
+        <li>完整测试覆盖</li>
+        <li>自定义关系/事件类型</li>
+        <li>API 文档站点</li>
+        <li>监控指标接入</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 时间线视图 -->
+  <div class="section-label animate" style="--i:29">⏱️ 行动时间线</div>
+
+  <div class="timeline animate" style="--i:30">
+    <div class="timeline-item">
+      <div class="timeline-item__title">本周立即行动</div>
+      <div class="timeline-item__desc">
+        ✅ 添加 LLM 重试机制 + 错误分类<br>
+        ✅ 添加数据库操作基础错误处理<br>
+        ✅ MCP 工具全局错误处理<br>
+        ✅ 修复 <code>changeType</code> 映射丢失
+      </div>
+    </div>
+    <div class="timeline-item">
+      <div class="timeline-item__title">短期目标 (1 个月)</div>
+      <div class="timeline-item__desc">
+        性能优化: embedAll、applyEntityLinks<br>
+        置信度阈值过滤<br>
+        持久化 importance 字段<br>
+        日期解析扩展
+      </div>
+    </div>
+    <div class="timeline-item timeline-item--past">
+      <div class="timeline-item__title">中期目标 (季度)</div>
+      <div class="timeline-item__desc">
+        完整测试覆盖<br>
+        结构化日志系统<br>
+        批量 LLM 调用优化<br>
+        文档完善
+      </div>
+    </div>
+  </div>
+
+  <!-- 模块问题分布 -->
+  <div class="section-label animate" style="--i:31">📊 模块问题分布</div>
+
+  <div class="table-wrap animate" style="--i:32">
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>模块</th>
+            <th>文件</th>
+            <th class="wide">关键问题</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="--i:33">
+            <td>智能编译</td>
+            <td><code>src/ai/compiler.ts</code></td>
+            <td>changeType映射、Timeline过度依赖分析、置信度计算不科学、smartMergeTruth内容丢失</td>
+          </tr>
+          <tr style="--i:34">
+            <td>实体链接</td>
+            <td><code>src/ai/entity-link.ts</code></td>
+            <td>无置信度过滤、内容截断、无重试机制、硬编码置信度、无去重</td>
+          </tr>
+          <tr style="--i:35">
+            <td>时间线提取</td>
+            <td><code>src/ai/timeline-extractor.ts</code></td>
+            <td>importance未持久化、日期解析不足、fallback简单、固定5条目限制</td>
+          </tr>
+          <tr style="--i:36">
+            <td>性能热点</td>
+            <td><code>src/repositories/brain-repo.ts</code></td>
+            <td>embedAll串行、applyEntityLinks串行、putPage立即sync、截断8000字符</td>
+          </tr>
+          <tr style="--i:37">
+            <td>错误处理</td>
+            <td><code>src/mcp/server.ts</code></td>
+            <td>LLM静默失败、无重试、数据库无错误处理、MCP 20+工具无错误处理</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <p class="subtitle animate" style="--i:38; margin-top: 40px;">
+    报告整合自: task-2 (智能编译), task-3 (实体链接&时间线), task-4 (性能瓶颈), task-5 (错误处理)
+  </p>
+
+</div>
+
+</body>
+</html>
