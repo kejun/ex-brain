@@ -1,5 +1,6 @@
 import type { ResolvedLLM } from "../settings";
 import { callLLM, resolveApiKey, isLLMConfigured } from "./llm-client";
+import { jsonrepair } from "jsonrepair";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -112,11 +113,14 @@ export async function extractRelations(
   const resp = await callLLM(llm, `Extract relationships from:\n\n${context}`, 1024, systemPrompt);
   if (!resp) return [];
 
+  // Extract JSON array from response
   const match = resp.match(/\[[\s\S]*\]/);
   if (!match) return [];
 
   try {
-    const parsed = JSON.parse(match[0]) as unknown[];
+    // Use jsonrepair to fix common LLM JSON issues (unterminated strings, etc.)
+    const repaired = jsonrepair(match[0]);
+    const parsed = JSON.parse(repaired) as unknown[];
     const relations: ExtractionResult = [];
 
     for (const item of parsed) {

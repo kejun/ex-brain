@@ -13,6 +13,7 @@ import { compileTruth } from "../ai/compiler";
 import { extractTimelineEvents } from "../ai/timeline-extractor";
 import { BrainDb } from "../db/client";
 import { DbError, wrapDbError, logDbError, type DbOperation } from "../db/errors";
+import { sanitizeQuery } from "../utils/query-sanitizer";
 
 type SqlRow = Record<string, unknown>;
 
@@ -202,10 +203,13 @@ export class BrainRepository {
   }
 
   async search(query: string, limit = 10, type?: string): Promise<SearchHit[]> {
+    // Sanitize query to prevent JSON parse errors in seekdb
+    const sanitizedQuery = sanitizeQuery(query);
+    
     try {
       const where = type ? ({ type } as Record<string, unknown>) : undefined;
       const result = await this.db.pagesCollection.hybridSearch({
-        query: { whereDocument: { $contains: query }, where },
+        query: { whereDocument: { $contains: sanitizedQuery }, where },
         nResults: limit,
         include: ["documents", "metadatas", "distances"],
       });
@@ -231,16 +235,50 @@ export class BrainRepository {
       }
       return hits;
     } catch (error) {
-      const dbError = wrapDbError(error, "search", { query, limit, type });
+      // Fallback to SQL LIKE search if vector search fails
+      console.warn(`[BrainRepo] Vector search failed, using SQL fallback for: ${sanitizedQuery}`);
+      return await this.fallbackSearch(sanitizedQuery, limit, type);
+    }
+  }
+
+  /**
+   * Fallback search using SQL LIKE when vector search fails.
+   * More robust but less accurate.
+   */
+  private async fallbackSearch(query: string, limit = 10, type?: string): Promise<SearchHit[]> {
+    try {
+      const sql = type
+        ? `SELECT slug, type, title, compiled_truth, updated_at FROM pages WHERE type = ? AND compiled_truth LIKE ? ORDER BY updated_at DESC LIMIT ?`
+        : `SELECT slug, type, title, compiled_truth, updated_at FROM pages WHERE compiled_truth LIKE ? ORDER BY updated_at DESC LIMIT ?`;
+      
+      const params = type ? [type, `%${query}%`, limit] : [`%${query}%`, limit];
+      
+      const rows = many<{ slug: string; type: string; title: string; compiled_truth: string; updated_at: string }>(
+        await this.db.client.execute(sql, params)
+      );
+      
+      return rows.map(row => ({
+        slug: row.slug,
+        title: row.title,
+        type: row.type,
+        score: 0.5, // Fixed score for fallback search
+        excerpt: row.compiled_truth.slice(0, 220),
+        updatedAt: row.updated_at,
+      }));
+    } catch (fallbackError) {
+      const dbError = wrapDbError(fallbackError, "fallbackSearch", { query, limit, type });
       logDbError(dbError);
-      throw dbError;
+      return []; // Return empty results instead of throwing
     }
   }
 
   async query(question: string, limit = 10): Promise<SearchHit[]> {
+    // Sanitize question to prevent parse errors
+    const sanitizedQuestion = sanitizeQuery(question);
+    
     try {
       const result = await this.db.pagesCollection.query({
-        queryTexts: question,
+        queryTexts: sanitizedQuestion,
         nResults: limit,
         include: ["documents", "metadatas", "distances"],
       });

@@ -1,6 +1,7 @@
 import type { ResolvedLLM } from "../settings";
 import type { TimelineEntry } from "../types";
 import { callLLM, resolveApiKey, isLLMConfigured } from "./llm-client";
+import { jsonrepair } from "jsonrepair";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -197,7 +198,9 @@ function parseExtractionResponse(resp: string, pageSlug: string): TimelineEntry[
   if (!match) return [];
 
   try {
-    const parsed = JSON.parse(match[0]) as unknown[];
+    // Use jsonrepair to fix common LLM JSON issues
+    const repaired = jsonrepair(match[0]);
+    const parsed = JSON.parse(repaired) as unknown[];
     const entries: TimelineEntry[] = [];
     
     for (const e of parsed) {

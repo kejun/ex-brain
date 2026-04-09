@@ -1,6 +1,7 @@
 import type { ResolvedLLM } from "../settings";
 import type { TimelineEntry } from "../types";
 import { callLLM, resolveApiKey } from "./llm-client";
+import { jsonrepair } from "jsonrepair";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -351,7 +352,9 @@ function parseAnalysisResponse(resp: string): FactAnalysis {
   }
 
   try {
-    const parsed = JSON.parse(match[0]) as Record<string, unknown>;
+    // Use jsonrepair to fix common LLM JSON issues
+    const repaired = jsonrepair(match[0]);
+    const parsed = JSON.parse(repaired) as Record<string, unknown>;
     
     const facts: ExtractedFact[] = [];
     const rawFacts = parsed.facts as unknown[] ?? [];
@@ -391,7 +394,9 @@ function parseMergeResponse(resp: string): { compiledTruth: string; changed: boo
   }
 
   try {
-    const parsed = JSON.parse(match[0]) as Record<string, unknown>;
+    // Use jsonrepair to fix common LLM JSON issues
+    const repaired = jsonrepair(match[0]);
+    const parsed = JSON.parse(repaired) as Record<string, unknown>;
     return {
       compiledTruth: String(parsed.compiledTruth ?? ""),
       changed: Boolean(parsed.changed),
@@ -413,7 +418,9 @@ function parseTimelineResponse(resp: string, pageSlug: string): TimelineEntry[] 
   if (!match) return [];
 
   try {
-    const parsed = JSON.parse(match[0]) as unknown[];
+    // Use jsonrepair to fix common LLM JSON issues
+    const repaired = jsonrepair(match[0]);
+    const parsed = JSON.parse(repaired) as unknown[];
     const entries: TimelineEntry[] = [];
     
     for (const e of parsed) {
