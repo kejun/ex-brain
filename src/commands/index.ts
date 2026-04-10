@@ -1,4 +1,5 @@
 import { basename, resolve } from "node:path";
+import { readFileSync } from "node:fs";
 import { Command } from "commander";
 import { DEFAULT_DB_NAME, inferTypeFromSlug, slugToTitle, normalizeLongSlug, slugify } from "../config";
 import { BrainDb } from "../db/client";
@@ -168,8 +169,11 @@ async function resolveInput(
 // ---------------------------------------------------------------------------
 
 export function buildProgram(): Command {
+  const pkgPath = new URL("../../package.json", import.meta.url);
+  const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
   const program = new Command("ebrain")
     .description("Personal knowledge base CLI powered by seekdb")
+    .version(pkg.version, "-V, --version", "output the version number")
     .addHelpText(
       "after",
       `
