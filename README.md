@@ -2,6 +2,10 @@
 
 CLI personal knowledge base built on [seekdb](https://docs.seekdb.ai/), featuring page management, hybrid search, timelines, tags, import/export, and MCP Server.
 
+## Demo 
+
+<video controls="true" width="800" height="438"><source src="https://obcommunityprod.oss-cn-shanghai.aliyuncs.com/prod/blog/2026-04/6aaf141a-75e6-4557-a37d-58036f52fb35.mp4" type="video/mp4"></video>
+
 ## Core Features
 
 - **Knowledge Graph Visualization** - Interactive graph showing entity relationships
