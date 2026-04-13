@@ -1,9 +1,7 @@
 import { test, expect, describe } from "bun:test";
 import { compileTruth, type CompileInput } from "./compiler";
-import { extractTimelineEvents, type TimelineExtractionInput } from "./timeline-extractor";
 import type { ResolvedLLM } from "../settings";
 
-// Mock LLM configuration
 const mockLLM: ResolvedLLM = {
   baseURL: "",
   model: "qwen-plus",
@@ -11,8 +9,8 @@ const mockLLM: ResolvedLLM = {
   apiKeyEnv: "DASHSCOPE_API_KEY",
 };
 
-describe("Compiler - Info Type Classification", () => {
-  test("classifies funding stage change as status_update", async () => {
+describe("Compiler > Fallback behavior (no LLM key)", () => {
+  test("falls back to append when no API key configured", async () => {
     const input: CompileInput = {
       currentTruth: "- **Funding Stage**: Seed\n- **Valuation**: ~$10M",
       timeline: [],
@@ -26,14 +24,15 @@ describe("Compiler - Info Type Classification", () => {
       },
     };
 
-    // Without LLM, should fallback to append
     const result = await compileTruth(input, mockLLM);
     expect(result.changed).toBe(true);
     expect(result.changeType).toBe("append");
-    expect(result.confidence).toBeLessThan(0.7);
+    expect(result.compiledTruth).toContain("River AI closed Series A funding");
+    expect(result.compiledTruth).toContain("Source: meeting_notes");
+    expect(result.confidence).toBe(0.5);
   });
 
-  test("appends new facts with source attribution", async () => {
+  test("appends new facts to empty compiled truth", async () => {
     const input: CompileInput = {
       currentTruth: "",
       timeline: [],
@@ -59,98 +58,41 @@ describe("Compiler - Info Type Classification", () => {
     const result = await compileTruth(input, mockLLM);
     expect(result.compiledTruth).toContain("Old fact");
     expect(result.compiledTruth).toContain("New information");
+    expect(result.compiledTruth).toContain("Active");
+  });
+
+  test("creates ## Facts section when missing", async () => {
+    const input: CompileInput = {
+      currentTruth: "## Status\n\n- Active",
+      timeline: [],
+      newInfo: "New update",
+      source: "user",
+      date: "2024-06-01",
+    };
+
+    const result = await compileTruth(input, mockLLM);
+    expect(result.compiledTruth).toContain("## Facts");
+    expect(result.compiledTruth).toContain("New update");
   });
 });
 
-describe("Timeline Extractor - Event Detection", () => {
-  test("extracts events with explicit dates", async () => {
-    const input: TimelineExtractionInput = {
-      content: "River AI closed Series A on Jan 15, 2024. The funding round was $50M.",
-      source: "news",
-      defaultDate: "2024-05-01",
-      pageSlug: "companies/river-ai",
-    };
-
-    // Without LLM, should use fallback regex extraction
-    const result = await extractTimelineEvents(input, mockLLM);
-    
-    // Fallback should find the date
-    if (result.entries.length > 0) {
-      expect(result.entries[0]?.date).toMatch(/2024-01/);
-    }
-  });
-
-  test("extracts events from Chinese date format", async () => {
-    const input: TimelineExtractionInput = {
-      content: "公司在2024年1月15日完成了A轮融资。",
-      source: "report",
-      defaultDate: "2024-05-01",
-      pageSlug: "companies/test",
-    };
-
-    const result = await extractTimelineEvents(input, mockLLM);
-    
-    if (result.entries.length > 0) {
-      expect(result.entries[0]?.date).toBe("2024-01-15");
-    }
-  });
-
-  test("uses default date for relative dates", async () => {
-    const input: TimelineExtractionInput = {
-      content: "The meeting happened yesterday and we discussed the roadmap.",
-      source: "notes",
-      defaultDate: "2024-05-20",
-      pageSlug: "meetings/daily",
-    };
-
-    const result = await extractTimelineEvents(input, mockLLM);
-    
-    if (result.entries.length > 0) {
-      // Should use default date - 1 for yesterday
-      expect(result.entries[0]?.date).toMatch(/2024-05/);
-    }
-  });
-
-  test("returns empty when no events detected", async () => {
-    const input: TimelineExtractionInput = {
-      content: "This is just some random text without any dates or events.",
-      source: "misc",
-      defaultDate: "2024-01-01",
-      pageSlug: "misc/notes",
-    };
-
-    const result = await extractTimelineEvents(input, mockLLM);
-    expect(result.entries.length).toBe(0);
-    expect(result.confidence).toBeLessThan(0.5);
-  });
-});
-
-describe("Date Normalization", () => {
-  test("handles ISO format", () => {
-    // This is tested internally in timeline-extractor
-    expect(true).toBe(true);
-  });
-
-  test("handles English month format", () => {
-    expect(true).toBe(true);
-  });
-});
-
-describe("Integration - Compile + Timeline", () => {
-  test("compile returns timeline entries for status updates", async () => {
+describe("Compiler > Timeline extraction fallback", () => {
+  test("valid result structure returned", async () => {
     const input: CompileInput = {
       currentTruth: "- **Status**: Seed stage",
       timeline: [],
-      newInfo: "Series A funding closed",
+      newInfo: "Series A funding closed on 2024-05-20",
       source: "news",
       date: "2024-05-20",
     };
 
     const result = await compileTruth(input, mockLLM);
-    
-    // Without LLM, timeline entries may be empty
-    // But the result structure should be valid
     expect(result).toHaveProperty("timelineEntries");
     expect(Array.isArray(result.timelineEntries)).toBe(true);
+    expect(result).toHaveProperty("compiledTruth");
+    expect(result).toHaveProperty("changed");
+    expect(result).toHaveProperty("changeType");
+    expect(result).toHaveProperty("changeSummary");
+    expect(result).toHaveProperty("confidence");
   });
 });

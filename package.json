@@ -24,6 +24,7 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "@ax-llm/ax": "^19.0.43",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@seekdb/js-bindings": "^1.2.0",
     "@seekdb/openai": "1.2.0",

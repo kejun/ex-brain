@@ -1,6 +1,14 @@
+/**
+ * Entity Link Extraction — Ax Signature version.
+ *
+ * Uses f.json() for complex output instead of f.object().array()
+ * because Ax's tool calling response parsing has compatibility issues
+ * with DashScope/qwen models.
+ */
+
+import { ax, f } from "@ax-llm/ax";
 import type { ResolvedLLM } from "../settings";
-import { callLLM, resolveApiKey, isLLMConfigured } from "./llm-client";
-import { jsonrepair } from "jsonrepair";
+import { createAxAI } from "./ax-adapter";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -8,17 +16,10 @@ import { jsonrepair } from "jsonrepair";
 
 export type EntityType = "person" | "company" | "project" | "organization" | "event" | "other";
 
-export type RelationType = 
-  | "founder_of"
-  | "works_at"
-  | "leader_of"
-  | "collaborates_with"
-  | "competes_with"
-  | "acquired"
-  | "part_of"
-  | "invested_in"
-  | "mentioned_in"
-  | "related_to";
+export type RelationType =
+  | "founder_of" | "works_at" | "leader_of"
+  | "collaborates_with" | "competes_with" | "acquired"
+  | "part_of" | "invested_in" | "mentioned_in" | "related_to";
 
 export interface EntityRef {
   name: string;
@@ -29,18 +30,31 @@ export interface EntityRelation {
   type: "relation";
   from: EntityRef;
   to: EntityRef;
-  /** Semantic relation type. */
   relation: RelationType;
-  /** The original sentence mentioning this relationship. */
   context: string;
-  /** Confidence score 0.0 - 1.0. */
   confidence: number;
 }
 
 export type ExtractionResult = EntityRelation[];
 
 // ---------------------------------------------------------------------------
-// Entity type mapping for slug prefix
+// Signature definition (using json type for complex output)
+// ---------------------------------------------------------------------------
+
+const entitySig = f()
+  .input("inputText", f.string("Text to extract entity relationships from"))
+  .output("relations", f.json(
+    "Array of relations. Each: { fromName, fromType, toName, toType, relation, context (in Chinese), confidence }. " +
+    "fromType/toType: person|company|project|organization|event|other. " +
+    "relation: founder_of|works_at|leader_of|collaborates_with|competes_with|acquired|part_of|invested_in|mentioned_in|related_to. " +
+    "confidence: 0-1."
+  ))
+  .build();
+
+const entityGen = ax(entitySig);
+
+// ---------------------------------------------------------------------------
+// Entity slug helpers
 // ---------------------------------------------------------------------------
 
 const TYPE_PREFIX: Record<EntityType, string> = {
@@ -52,9 +66,6 @@ const TYPE_PREFIX: Record<EntityType, string> = {
   other: "entities",
 };
 
-/**
- * Convert an entity name to a slug: "Ali Partovi" → "ali-partovi"
- */
 export function entityToSlug(name: string, type: EntityType): string {
   const prefix = TYPE_PREFIX[type] ?? "entities";
   const slugPart = name
@@ -65,131 +76,113 @@ export function entityToSlug(name: string, type: EntityType): string {
 }
 
 // ---------------------------------------------------------------------------
-// LLM extraction
+// Public API
 // ---------------------------------------------------------------------------
 
-const RELATION_TYPES = [
-  "founder_of", "works_at", "leader_of", 
-  "collaborates_with", "competes_with", "acquired", 
-  "part_of", "invested_in", "mentioned_in", "related_to"
-].join(", ");
-
-/**
- * Use the configured LLM to extract entity relationships from text.
- * Returns a list of relations with relation type, confidence, and context.
- * Filters out relations with confidence below the threshold (default: 0.7).
- */
 export async function extractRelations(
   content: string,
   llm: ResolvedLLM,
   options?: {
-    /** Minimum confidence threshold (0-1). Relations below this are filtered out. Default: 0.7 */
     confidenceThreshold?: number;
   },
 ): Promise<ExtractionResult> {
   const trimmed = content.trim();
   if (!trimmed) return [];
 
-  // Truncate for API efficiency: first 4000 + last 1000 chars
-  let context: string;
-  if (trimmed.length <= 5000) {
-    context = trimmed;
-  } else {
-    context = trimmed.slice(0, 4000) + "\n\n...\n\n" + trimmed.slice(-1000);
-  }
+  const aiClient = createAxAI(llm);
+  if (!aiClient) return [];
 
-  if (!isLLMConfigured(llm)) return [];
-
-  const systemPrompt =
-    "You are a knowledge graph extraction assistant. " +
-    "Identify relationships between named entities. " +
-    "For each relationship, provide: from entity, to entity, relation type, confidence score, and exact context sentence. " +
-    `Allowed relation types: ${RELATION_TYPES}. ` +
-    "Output ONLY a JSON array. Schema: " +
-    '{ "type": "relation", "from": {"name": "...", "type": "..."}, ' +
-    '"to": {"name": "...", "type": "..."}, "relation": "...", "context": "...", "confidence": 0.9 }. ' +
-    "Output ONLY the JSON array. /no_think";
-
-  const resp = await callLLM(llm, `Extract relationships from:\n\n${context}`, 1024, systemPrompt);
-  if (!resp) return [];
-
-  // Extract JSON array from response
-  const match = resp.match(/\[[\s\S]*\]/);
-  if (!match) return [];
+  const context = trimmed.length <= 5000
+    ? trimmed
+    : trimmed.slice(0, 4000) + "\n\n...\n\n" + trimmed.slice(-1000);
 
   try {
-    // Use jsonrepair to fix common LLM JSON issues (unterminated strings, etc.)
-    const repaired = jsonrepair(match[0]);
-    const parsed = JSON.parse(repaired) as unknown[];
+    const result = await entityGen.forward(aiClient, { inputText: context });
+
+    const rawRelations = parseRelations(result.relations);
+    const threshold = options?.confidenceThreshold ?? 0.7;
+
     const relations: ExtractionResult = [];
-
-    for (const item of parsed) {
-      if (typeof item !== "object" || item === null) continue;
-      const r = item as Record<string, unknown>;
-      if (r.type !== "relation") continue;
-
-      const fromRef = parseEntityRef(r.from);
-      const toRef = parseEntityRef(r.to);
-      const relation = String(r.relation || "related_to");
-      const contextStr = typeof r.context === "string" ? r.context.trim() : "";
-      const confidence = typeof r.confidence === "number" ? r.confidence : 0.8;
-
-      if (!fromRef || !toRef || !contextStr) continue;
-
+    for (const r of rawRelations) {
+      if (!r.fromName || !r.toName || !r.context) continue;
       relations.push({
         type: "relation",
-        from: fromRef,
-        to: toRef,
-        relation: normalizeRelationType(relation),
-        context: contextStr,
-        confidence,
+        from: { name: r.fromName, type: normalizeEntityType(r.fromType) },
+        to: { name: r.toName, type: normalizeEntityType(r.toType) },
+        relation: normalizeRelationType(r.relation),
+        context: String(r.context).trim(),
+        confidence: typeof r.confidence === "number" ? r.confidence : 0.8,
       });
     }
 
-    // Filter by confidence threshold (default 0.7)
-    const threshold = options?.confidenceThreshold ?? 0.7;
-    return relations.filter((r) => r.confidence >= threshold);
+    return relations.filter(r => r.confidence >= threshold);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    console.warn(`[ebrain] Entity extraction error: ${msg}`);
+    console.warn(`[ebrain] Entity extraction failed: ${msg}`);
     return [];
   }
 }
 
-function parseEntityRef(val: unknown): EntityRef | null {
-  if (typeof val !== "object" || val === null) return null;
-  const obj = val as Record<string, unknown>;
-  const name = typeof obj.name === "string" ? obj.name.trim() : "";
-  const rawType = typeof obj.type === "string" ? obj.type : "other";
-  if (!name) return null;
-  return { name, type: normalizeEntityType(rawType) };
+interface RawRelation {
+  fromName?: string;
+  fromType?: string;
+  toName?: string;
+  toType?: string;
+  relation?: string;
+  context?: string;
+  confidence?: number;
+}
+
+function parseRelations(raw: unknown): RawRelation[] {
+  if (Array.isArray(raw)) {
+    // Handle both English and Chinese field names from LLM output
+    return raw.map((item: Record<string, unknown>) => {
+      // Normalize field names: accept both English and Chinese variants
+      return {
+        fromName: String(item.fromName ?? item.from_name ?? item.from ?? item.来源 ?? ''),
+        fromType: String(item.fromType ?? item.from_type ?? item.fromType ?? item.来源类型 ?? ''),
+        toName: String(item.toName ?? item.to_name ?? item.to ?? item.目标 ?? ''),
+        toType: String(item.toType ?? item.to_type ?? item.toType ?? item.目标类型 ?? ''),
+        relation: String(item.relation ?? item.relationType ?? item.relation_type ?? item.关系 ?? ''),
+        context: String(item.context ?? item.description ?? item.描述 ?? item.上下文 ?? ''),
+        confidence: typeof item.confidence === 'number' ? item.confidence : 
+                    typeof item.confidence === 'string' ? parseFloat(item.confidence) || 0.8 : 0.8,
+      };
+    }).filter(r => r.fromName && r.toName && r.relation);
+  }
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw) as Record<string, unknown>[];
+      return parseRelations(parsed);
+    } catch { return []; }
+  }
+  return [];
 }
 
 function normalizeEntityType(raw: string): EntityType {
+  if (!raw) return "other";
   const lower = raw.toLowerCase().trim();
-  if (lower.includes("person") || lower.includes("people")) return "person";
-  if (lower.includes("company") || lower.includes("corp") || lower.includes("business")) return "company";
-  if (lower.includes("project")) return "project";
-  if (lower.includes("organization") || lower.includes("org") || lower.includes("ngo")) return "organization";
-  if (lower.includes("event")) return "event";
+  if (lower.includes("person") || lower.includes("people") || lower.includes("人物") || lower.includes("人")) return "person";
+  if (lower.includes("company") || lower.includes("corp") || lower.includes("business") || lower.includes("公司") || lower.includes("企业")) return "company";
+  if (lower.includes("project") || lower.includes("项目") || lower.includes("产品")) return "project";
+  if (lower.includes("organization") || lower.includes("org") || lower.includes("ngo") || lower.includes("组织") || lower.includes("机构") || lower.includes("学校") || lower.includes("大学")) return "organization";
+  if (lower.includes("event") || lower.includes("事件") || lower.includes("活动")) return "event";
   return "other";
 }
 
 export function normalizeRelationType(raw: string): RelationType {
+  if (!raw) return "related_to";
   const lower = raw.toLowerCase().trim().replace(/-/g, "_");
-  const validTypes = RELATION_TYPES.split(", ");
-  if (validTypes.includes(lower as RelationType)) return lower as RelationType;
-  // Fallbacks
-  if (lower.includes("founder") || lower.includes("create")) return "founder_of";
-  if (lower.includes("work") || lower.includes("join")) return "works_at";
-  if (lower.includes("lead") || lower.includes("head") || lower.includes("manage")) return "leader_of";
-  if (lower.includes("collabor") || lower.includes("partner")) return "collaborates_with";
-  if (lower.includes("compet")) return "competes_with";
-  if (lower.includes("acquir") || lower.includes("buy")) return "acquired";
-  if (lower.includes("invest")) return "invested_in";
-  if (lower.includes("part") || lower.includes("belong")) return "part_of";
-  if (lower.includes("mention") || lower.includes("refer")) return "mentioned_in";
+  const validTypes = ["founder_of", "works_at", "leader_of", "collaborates_with", "competes_with", "acquired", "part_of", "invested_in", "mentioned_in", "related_to"];
+  if (validTypes.includes(lower)) return lower as RelationType;
+  if (lower.includes("founder") || lower.includes("create") || lower.includes("创办") || lower.includes("创立")) return "founder_of";
+  if (lower.includes("work") || lower.includes("join") || lower.includes("任职") || lower.includes("就职")) return "works_at";
+  if (lower.includes("lead") || lower.includes("head") || lower.includes("manage") || lower.includes("负责")) return "leader_of";
+  if (lower.includes("collabor") || lower.includes("partner") || lower.includes("合作")) return "collaborates_with";
+  if (lower.includes("compet") || lower.includes("竞争")) return "competes_with";
+  if (lower.includes("acquir") || lower.includes("buy") || lower.includes("收购")) return "acquired";
+  if (lower.includes("invest") || lower.includes("投资")) return "invested_in";
+  if (lower.includes("part") || lower.includes("belong") || lower.includes("隶属")) return "part_of";
+  if (lower.includes("mention") || lower.includes("refer") || lower.includes("提及")) return "mentioned_in";
   return "related_to";
 }
-
-

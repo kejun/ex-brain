@@ -1093,7 +1093,7 @@ Examples:
         }
         
         for (let i = 0; i < fileData.length; i += BATCH_SIZE) {
-          const batch = fileData.slice(i, i + BATCH_SIZE).filter(d => d.tags.length === 0);
+          const batch = fileData.slice(i, i + BATCH_SIZE);
           if (!jsonOut) {
             spinner.update(`Extracting entities... ${Math.min(i + BATCH_SIZE, fileData.length)}/${fileData.length}`);
           }

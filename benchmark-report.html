@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ex-brain AI 模块效果评测 — 实际生成效果</title>
+<style>
+  :root {
+    --bg: #0f172a; --card: #1e293b; --card-alt: #253347; --border: #334155;
+    --text: #e2e8f0; --muted: #94a3b8; --accent: #3b82f6;
+    --green: #22c55e; --yellow: #eab308; --red: #ef4444; --purple: #8b5cf6; --cyan: #06b6d4;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; padding: 2rem; }
+  .container { max-width: 1100px; margin: 0 auto; }
+  h1 { font-size: 2rem; margin-bottom: 0.3rem; background: linear-gradient(135deg, var(--accent), var(--purple)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .subtitle { color: var(--muted); margin-bottom: 2rem; font-size: 0.95rem; }
+  h2 { font-size: 1.3rem; margin: 2.5rem 0 1rem; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 0.4rem; }
+  h3 { font-size: 1.1rem; margin: 1.2rem 0 0.6rem; color: var(--cyan); }
+
+  /* Card styles */
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1.5rem; margin-bottom: 1rem; }
+  .card-alt { background: var(--card-alt); border: 1px solid var(--border); border-radius: 10px; padding: 1.5rem; margin-bottom: 1rem; }
+
+  /* Article section */
+  .article-text {
+    background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1.2rem; font-size: 0.9rem; line-height: 1.7; white-space: pre-wrap;
+    max-height: 400px; overflow-y: auto; color: var(--muted);
+  }
+  .article-text .highlight { color: var(--yellow); }
+
+  /* Stats bar */
+  .stats-bar {
+    display: flex; gap: 1rem; flex-wrap: wrap; margin: 1.5rem 0;
+  }
+  .stat {
+    background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2);
+    border-radius: 8px; padding: 0.8rem 1.2rem; flex: 1; min-width: 150px; text-align: center;
+  }
+  .stat .value { font-size: 1.5rem; font-weight: bold; color: var(--accent); }
+  .stat .label { color: var(--muted); font-size: 0.8rem; margin-top: 0.2rem; }
+
+  /* Compiled truth display */
+  .compiled-truth {
+    background: rgba(0,0,0,0.3); border-left: 3px solid var(--green);
+    border-radius: 0 8px 8px 0; padding: 1.2rem; font-size: 0.9rem; line-height: 1.7;
+    max-height: 500px; overflow-y: auto;
+  }
+  .compiled-truth h3 { color: var(--green); margin: 1rem 0 0.5rem; font-size: 1rem; }
+  .compiled-truth h4 { color: var(--cyan); margin: 0.8rem 0 0.3rem; font-size: 0.9rem; }
+  .compiled-truth li { margin-left: 1.5rem; margin-bottom: 0.3rem; }
+  .compiled-truth strong { color: var(--text); }
+  .compiled-truth br { display: none; }
+
+  /* Old compiled truth */
+  .old-truth {
+    background: rgba(0,0,0,0.2); border-left: 3px solid var(--muted);
+    border-radius: 0 8px 8px 0; padding: 1.2rem; font-size: 0.85rem; color: var(--muted);
+    max-height: 200px; overflow-y: auto;
+  }
+
+  /* Relation cards */
+  .relation-card {
+    display: flex; align-items: center; gap: 0.8rem; padding: 0.8rem 1rem;
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    margin-bottom: 0.6rem; flex-wrap: wrap;
+  }
+  .entity { padding: 0.5rem 0.8rem; border-radius: 6px; min-width: 100px; text-align: center; }
+  .entity.from { background: rgba(139, 92, 246, 0.15); border: 1px solid rgba(139, 92, 246, 0.3); }
+  .entity.to { background: rgba(6, 182, 212, 0.15); border: 1px solid rgba(6, 182, 212, 0.3); }
+  .entity-name { font-weight: 600; font-size: 0.9rem; }
+  .entity-type { font-size: 0.75rem; color: var(--muted); margin-top: 0.2rem; }
+  .relation-arrow { display: flex; flex-direction: column; align-items: center; }
+  .relation-type { font-size: 0.75rem; color: var(--accent); font-weight: 500; margin-bottom: 0.2rem; }
+  .confidence-badge { font-size: 0.75rem; padding: 0.15rem 0.5rem; border-radius: 4px; font-weight: 600; margin-left: auto; }
+
+  /* Timeline */
+  .timeline-entry {
+    display: flex; gap: 1rem; padding: 0.8rem 1rem; background: var(--card);
+    border: 1px solid var(--border); border-radius: 8px; margin-bottom: 0.5rem;
+    align-items: flex-start;
+  }
+  .timeline-date {
+    font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.85rem;
+    color: var(--yellow); white-space: nowrap; min-width: 100px;
+    background: rgba(234, 179, 8, 0.1); padding: 0.3rem 0.6rem; border-radius: 4px;
+  }
+  .timeline-summary { font-size: 0.9rem; color: var(--text); }
+  .timeline-detail { font-size: 0.8rem; color: var(--muted); margin-top: 0.3rem; }
+
+  /* Summary */
+  .summary-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; }
+  .summary-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1.2rem; text-align: center;
+  }
+  .summary-card .number { font-size: 2rem; font-weight: bold; }
+  .summary-card .label { color: var(--muted); font-size: 0.85rem; }
+  .summary-card.green .number { color: var(--green); }
+  .summary-card.blue .number { color: var(--accent); }
+  .summary-card.yellow .number { color: var(--yellow); }
+
+  .footer { text-align: center; color: var(--muted); margin-top: 2rem; font-size: 0.8rem; }
+
+  @media (max-width: 768px) {
+    .summary-grid { grid-template-columns: 1fr; }
+    .relation-card { flex-direction: column; }
+    .timeline-entry { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🧪 ex-brain AI 模块 — 实际生成效果评测</h1>
+  <p class="subtitle">使用同一篇文章，展示编译器、时间线提取、实体关系提取的实际输出效果 | 模型: qwen3.5-plus</p>
+
+  <!-- Stats Bar -->
+  <div class="stats-bar">
+    <div class="stat">
+      <div class="value">16334ms</div>
+      <div class="label">编译耗时</div>
+    </div>
+    <div class="stat">
+      <div class="value">8192ms</div>
+      <div class="label">时间线提取</div>
+    </div>
+    <div class="stat">
+      <div class="value">17999ms</div>
+      <div class="label">实体提取</div>
+    </div>
+    <div class="stat">
+      <div class="value">14</div>
+      <div class="label">识别关系数</div>
+    </div>
+    <div class="stat">
+      <div class="value">5</div>
+      <div class="label">提取事件数</div>
+    </div>
+  </div>
+
+  <!-- 原始文章 -->
+  <h2>📄 测试文章（输入）</h2>
+  <div class="article-text"># River AI 公司报告
+
+River AI 由前谷歌工程师 John Smith 于 2020 年创立，他在谷歌从事机器学习基础设施工作长达 8 年。公司最初在旧金山以 5 人小团队起步，专注于为金融行业打造 AI 驱动的分析工具。
+
+2021 年 3 月，River AI 从红杉资本获得 500 万美元的种子轮融资，用于扩充工程团队。到 2021 年底，公司已发展至 30 名员工，并推出首款产品 RiverAI Insights——一款面向对冲基金的实时分析仪表盘。
+
+2022 年对 River AI 来说是充满挑战的一年。公司面临来自 Palantir 和 Databricks 等老牌厂商的激烈竞争。为此，他们调整战略，将重心转向中型市场，提供更具性价比和易用性的解决方案。
+
+2023 年 1 月，River AI 任命 Sarah Chen 为首席运营官（COO）。Sarah 此前在 Snowflake 担任运营副总裁，在扩展企业级软件公司规模方面拥有丰富经验。在她的带领下，River AI 优化了运营流程，并扩大了销售团队。
+
+转折点出现在 2024 年 3 月 15 日，River AI 宣布完成了 5000 万美元的 A 轮融资，由红杉资本领投，原有投资方红杉资本继续跟投。此轮融资公司估值约 2 亿美元。截至公告发布时，River AI 在旧金山、纽约和伦敦设有办公室，拥有 150 名员工，服务超过 200 家企业客户，其中包括摩根大通、高盛和城堡证券。
+
+River AI 与 Google Cloud 和 AWS 建立了战略合作伙伴关系，其技术架构基于 Apache Spark 和 Kubernetes。公司的主要竞争对手包括 Palantir、Databricks 和 ThoughtSpot。</div>
+
+  <!-- 旧的 compiled truth -->
+  <h2>📋 更新前 Compiled Truth</h2>
+  <div class="old-truth">## 概览
+
+- **成立时间**: 2020 年
+- **总部**: 旧金山
+- **行业**: AI 分析
+
+## 事实
+
+- 由前谷歌工程师 John Smith 创立
+- 最初专注于金融行业的 AI 分析工具
+- 创始团队 5 人</div>
+
+  <!-- 编译结果 -->
+  <h2>🧠 编译结果（Ax 输出）</h2>
+  <div class="card" style="border-left: 3px solid var(--green);">
+    <div style="display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap;">
+      <span class="confidence-badge" style="background: rgba(34,197,94,0.2); color: var(--green); font-size: 0.9rem;">
+        changeType: <strong>update</strong>
+      </span>
+      <span class="confidence-badge" style="background: rgba(59,130,246,0.2); color: var(--accent); font-size: 0.9rem;">
+        confidence: <strong>0.98</strong>
+      </span>
+      <span class="confidence-badge" style="background: rgba(139,92,246,0.2); color: var(--purple); font-size: 0.9rem;">
+        timeline entries: <strong>6</strong>
+      </span>
+    </div>
+    <p style="color: var(--muted); margin-bottom: 0.8rem; font-size: 0.9rem;">
+      📝 变更摘要: <strong style="color: var(--text);">更新了公司发展历程、融资详情、管理团队、最新估值、员工规模及办公地点。</strong>
+    </p>
+  </div>
+
+  <div class="compiled-truth"><h3>概览</h3></p><p><li><strong>成立时间</strong>: 2020 年 3 月 15 日 (注：原文仅提 2020 年，融资公告日为 2024 年 3 月 15 日，此处保留 2020 年)</li><br><li><strong>总部</strong>: 旧金山 (并在纽约、伦敦设有办公室)</li><br><li><strong>行业</strong>: AI 分析</li><br><li><strong>当前估值</strong>: 约 2 亿美元 (截至 2024 年 3 月)</li><br><li><strong>员工人数</strong>: 150 人 (截至 2024 年 3 月)</li><br><li><strong>主要客户</strong>: 摩根大通、高盛、城堡证券等超过 200 家企业</li></p><p><h3>事实与发展历程</h3></p><p><li><strong>创始背景</strong>: 由前谷歌工程师 John Smith 于 2020 年创立，其在谷歌从事机器学习基础设施工作长达 8 年。创始团队最初为 5 人。</li><br><li><strong>早期发展</strong>: 最初专注于为金融行业打造 AI 驱动的分析工具。</li><br><li><strong>2021 年</strong>: </li><br>  - 3 月：获得红杉资本 500 万美元种子轮融资。<br>  - 年底：员工增至 30 人，推出首款产品 &quot;RiverAI Insights&quot;（面向对冲基金的实时分析仪表盘）。<br><li><strong>2022 年战略调整</strong>: 面对 Palantir 和 Databricks 的竞争，将重心转向中型市场，提供更具性价比和易用性的解决方案。</li><br><li><strong>2023 年管理层扩充</strong>: 1 月任命 Sarah Chen 为首席运营官（COO），此前她在 Snowflake 担任运营副总裁。在其带领下优化了运营流程并扩大销售团队。</li><br><li><strong>2024 年里程碑</strong>: </li><br>  - 3 月 15 日：完成 5000 万美元 A 轮融资，由红杉资本领投。<br>  - 技术架构：基于 Apache Spark 和 Kubernetes。<br>  - 合作伙伴：与 Google Cloud 和 AWS 建立战略合作伙伴关系。<br><li><strong>竞争对手</strong>: Palantir, Databricks, ThoughtSpot。</li></div>
+
+  <!-- 时间线 -->
+  <h2>📅 提取的时间线</h2>
+  <div>
+    
+    <div class="timeline-entry">
+      <div class="timeline-date">2024-03-15</div>
+      <div class="timeline-summary">完成 5000 万美元 A 轮融资，估值达 2 亿美元，红杉资本领投。</div>
+      <div class="timeline-detail">此时公司拥有 150 名员工，服务超 200 家客户包括摩根大通等巨头。</div>
+    </div>
+  
+    <div class="timeline-entry">
+      <div class="timeline-date">2023-01-01</div>
+      <div class="timeline-summary">任命前 Snowflake 高管 Sarah Chen 为首席运营官，优化运营并扩大销售。</div>
+      <div class="timeline-detail">Sarah Chen 拥有丰富的企业级软件规模扩展经验，助力公司成长。</div>
+    </div>
+  
+    <div class="timeline-entry">
+      <div class="timeline-date">2022-01-01</div>
+      <div class="timeline-summary">面对激烈竞争，River AI 调整战略转向中型市场提供高性价比方案。</div>
+      <div class="timeline-detail">主要竞争对手包括 Palantir 和 Databricks，公司通过差异化策略应对挑战。</div>
+    </div>
+  
+    <div class="timeline-entry">
+      <div class="timeline-date">2021-12-31</div>
+      <div class="timeline-summary">公司推出首款产品 RiverAI Insights，员工规模增长至 30 人。</div>
+      <div class="timeline-detail">该产品是面向对冲基金的实时分析仪表盘，标志业务正式落地。</div>
+    </div>
+  
+    <div class="timeline-entry">
+      <div class="timeline-date">2021-03-01</div>
+      <div class="timeline-summary">River AI 获得红杉资本 500 万美元种子轮融资，用于扩充工程团队。</div>
+      
+    </div>
+  
+  </div>
+
+  <!-- 实体关系 -->
+  <h2>🔗 识别的实体关系（14 条）</h2>
+  <div>
+    
+    <div class="relation-card">
+      <div class="entity from">
+        <div class="entity-name">John Smith</div>
+        <div class="entity-type">person</div>
+      </div>
+      <div class="relation-arrow">
+        <span class="relation-type">founder_of</span>
+        <svg width="40" height="20" viewBox="0 0 40 20"><line x1="0" y1="10" x2="30" y2="10" stroke="#3b82f6" stroke-width="2"/><polygon points="30,5 40,10 30,15" fill="#3b82f6"/></svg>
+      </div>
+      <div class="entity to">
+        <div class="entity-name">River AI</div>
+        <div class="entity-type">company</div>
+      </div>
+      <div class="confidence-badge" style="background: #22c55e20; color: #22c55e">
+        100%
+      </div>
+    </div>
+    <div class="relation-card">
+      <div class="entity from">
+        <div class="entity-name">John Smith</div>
+        <div class="entity-type">person</div>
+      </div>
+      <div class="relation-arrow">
+        <span class="relation-type">works_at</span>
+        <svg width="40" height="20" viewBox="0 0 40 20"><line x1="0" y1="10" x2="30" y2="10" stroke="#3b82f6" stroke-width="2"/><polygon points="30,5 40,10 30,15" fill="#3b82f6"/></svg>
+      </div>
+      <div class="entity to">
+        <div class="entity-name">Google</div>
+        <div class="entity-type">company</div>
+      </div>
+      <div class="confidence-badge" style="background: #22c55e20; color: #22c55e">
+        95%
+      </div>
+    </div>
+    <div class="relation-card">
+      <div class="entity from">
+        <div class="entity-name">Sequoia Capital</div>
+        <div class="entity-type">organization</div>
+      </div>
+      <div class="relation-arrow">
+        <span class="relation-type">invested_in</span>
+        <svg width="40" height="20" viewBox="0 0 40 20"><line x1="0" y1="10" x2="30" y2="10" stroke="#3b82f6" stroke-width="2"/><polygon points="30,5 40,10 30,15" fill="#3b82f6"/></svg>
+      </div>
+      <div class="entity to">
+        <div class="entity-name">River AI</div>
+        <div class="entity-type">company</div>
+      </div>
+      <div class="confidence-badge" style="background: #22c55e20; color: #22c55e">
+        100%
+      </div>
+    </div>
+    <div class="relation-card">
+      <div class="entity from">
+        <div class="entity-name">Sarah Chen</div>
+        <div class="entity-type">person</div>
+      </div>
+      <div class="relation-arrow">
+        <span class="relation-type">leader_of</span>
+        <svg width="40" height="20" viewBox="0 0 40 20"><line x1="0" y1="10" x2="30" y2="10" stroke="#3b82f6" stroke-width="2"/><polygon points="30,5 40,10 30,15" fill="#3b82f6"/></svg>
+      </div>
+      <div class="entity to">
+        <div class="entity-name">River AI</div>
+        <div class="entity-type">company</div>
+      </div>
+      <div class="confidence-badge" style="background: #22c55e20; color: #22c55e">
+        100%
+      </div>
+    </div>
+    <div class="relation-card">
+      <div class="entity from">
+        <div class="entity-name">Sarah Chen</div>
+        <div class="entity-type">person</div>
+      </div>
+      <div class="relation-arrow">
+        <span class="relation-type">works_at</span>
+        <svg width="40" height="20" viewBox="0 0 40 20"><line x1="0" y1="10" x2="30" y2="10" stroke="#3b82f6" stroke-width="2"/><polygon points="30,5 40,10 30,15" fill="#3b82f6"/></svg>
+      </div>
+      <div class="entity to">
+        <div class="entity-name">Snowflake</div>
+        <div class="entity-type">company</div>
+      </div>
+      <div class="confidence-badge" style="background: #22c55e20; color: #22c55e">
+        95%
+      </div>
+    </div>
+    <div class="relation-card">
+      <div class="entity from">
+        <div class="entity-name">River AI</div>
+        <div class="entity-type">company</div>
+      </div>
+      <div class="relation-arrow">
+        <span class="relation-type">competes_with</span>
+        <svg width="40" height="20" viewBox="0 0 40 20"><line x1="0" y1="10" x2="30" y2="10" stroke="#3b82f6" stroke-width="2"/><polygon points="30,5 40,10 30,15" fill="#3b82f6"/></svg>
+      </div>
+      <div class="entity to">
+        <div class="entity-name">Palantir</div>
+        <div class="entity-type">company</div>
+      </div>
+      <div class="confidence-badge" style="background: #22c55e20; color: #22c55e">
+        90%
+      </div>
+    </div>
+    <div class="relation-card">
+      <div class="entity from">
+        <div class="entity-name">River AI</div>
+        <div class="entity-type">company</div>
+      </div>
+      <div class="relation-arrow">
+        <span class="relation-type">competes_with</span>
+        <svg width="40" height="20" viewBox="0 0 40 20"><line x1="0" y1="10" x2="30" y2="10" stroke="#3b82f6" stroke-width="2"/><polygon points="30,5 40,10 30,15" fill="#3b82f6"/></svg>
+      </div>
+      <div class="entity to">
+        <div class="entity-name">Databricks</div>
+        <div class="entity-type">company</div>
+      </div>
+      <div class="confidence-badge" style="background: #22c55e20; color: #22c55e">
+        90%
+      </div>
+    </div>
+    <div class="relation-card">
+      <div class="entity from">
+        <div class="entity-name">Sequoia Capital</div>
+        <div class="entity-type">organization</div>
+      </div>
+      <div class="relation-arrow">
+        <span class="relation-type">invested_in</span>
+        <svg width="40" height="20" viewBox="0 0 40 20"><line x1="0" y1="10" x2="30" y2="10" stroke="#3b82f6" stroke-width="2"/><polygon points="30,5 40,10 30,15" fill="#3b82f6"/></svg>
+      </div>
+      <div class="entity to">
+        <div class="entity-name">River AI</div>
+        <div class="entity-type">company</div>
+      </div>
+      <div class="confidence-badge" style="background: #22c55e20; color: #22c55e">
+        100%
+      </div>
+    </div>
+    <div class="relation-card">
+      <div class="entity from">
+        <div class="entity-name">JPMorgan Chase</div>
+        <div class="entity-type">company</div>
+      </div>
+      <div class="relation-arrow">
+        <span class="relation-type">related_to</span>
+        <svg width="40" height="20" viewBox="0 0 40 20"><line x1="0" y1="10" x2="30" y2="10" stroke="#3b82f6" stroke-width="2"/><polygon points="30,5 40,10 30,15" fill="#3b82f6"/></svg>
+      </div>
+      <div class="entity to">
+        <div class="entity-name">River AI</div>
+        <div class="entity-type">company</div>
+      </div>
+      <div class="confidence-badge" style="background: #eab30820; color: #eab308">
+        85%
+      </div>
+    </div>
+    <div class="relation-card">
+      <div class="entity from">
+        <div class="entity-name">Goldman Sachs</div>
+        <div class="entity-type">company</div>
+      </div>
+      <div class="relation-arrow">
+        <span class="relation-type">related_to</span>
+        <svg width="40" height="20" viewBox="0 0 40 20"><line x1="0" y1="10" x2="30" y2="10" stroke="#3b82f6" stroke-width="2"/><polygon points="30,5 40,10 30,15" fill="#3b82f6"/></svg>
+      </div>
+      <div class="entity to">
+        <div class="entity-name">River AI</div>
+        <div class="entity-type">company</div>
+      </div>
+      <div class="confidence-badge" style="background: #eab30820; color: #eab308">
+        85%
+      </div>
+    </div>
+    <div class="relation-card">
+      <div class="entity from">
+        <div class="entity-name">Citadel Securities</div>
+        <div class="entity-type">company</div>
+      </div>
+      <div class="relation-arrow">
+        <span class="relation-type">related_to</span>
+        <svg width="40" height="20" viewBox="0 0 40 20"><line x1="0" y1="10" x2="30" y2="10" stroke="#3b82f6" stroke-width="2"/><polygon points="30,5 40,10 30,15" fill="#3b82f6"/></svg>
+      </div>
+      <div class="entity to">
+        <div class="entity-name">River AI</div>
+        <div class="entity-type">company</div>
+      </div>
+      <div class="confidence-badge" style="background: #eab30820; color: #eab308">
+        85%
+      </div>
+    </div>
+    <div class="relation-card">
+      <div class="entity from">
+        <div class="entity-name">River AI</div>
+        <div class="entity-type">company</div>
+      </div>
+      <div class="relation-arrow">
+        <span class="relation-type">collaborates_with</span>
+        <svg width="40" height="20" viewBox="0 0 40 20"><line x1="0" y1="10" x2="30" y2="10" stroke="#3b82f6" stroke-width="2"/><polygon points="30,5 40,10 30,15" fill="#3b82f6"/></svg>
+      </div>
+      <div class="entity to">
+        <div class="entity-name">Google Cloud</div>
+        <div class="entity-type">company</div>
+      </div>
+      <div class="confidence-badge" style="background: #22c55e20; color: #22c55e">
+        90%
+      </div>
+    </div>
+    <div class="relation-card">
+      <div class="entity from">
+        <div class="entity-name">River AI</div>
+        <div class="entity-type">company</div>
+      </div>
+      <div class="relation-arrow">
+        <span class="relation-type">collaborates_with</span>
+        <svg width="40" height="20" viewBox="0 0 40 20"><line x1="0" y1="10" x2="30" y2="10" stroke="#3b82f6" stroke-width="2"/><polygon points="30,5 40,10 30,15" fill="#3b82f6"/></svg>
+      </div>
+      <div class="entity to">
+        <div class="entity-name">AWS</div>
+        <div class="entity-type">company</div>
+      </div>
+      <div class="confidence-badge" style="background: #22c55e20; color: #22c55e">
+        90%
+      </div>
+    </div>
+    <div class="relation-card">
+      <div class="entity from">
+        <div class="entity-name">RiverAI Insights</div>
+        <div class="entity-type">project</div>
+      </div>
+      <div class="relation-arrow">
+        <span class="relation-type">part_of</span>
+        <svg width="40" height="20" viewBox="0 0 40 20"><line x1="0" y1="10" x2="30" y2="10" stroke="#3b82f6" stroke-width="2"/><polygon points="30,5 40,10 30,15" fill="#3b82f6"/></svg>
+      </div>
+      <div class="entity to">
+        <div class="entity-name">River AI</div>
+        <div class="entity-type">company</div>
+      </div>
+      <div class="confidence-badge" style="background: #22c55e20; color: #22c55e">
+        95%
+      </div>
+    </div>
+  </div>
+
+  <!-- 效果总结 -->
+  <h2>📊 效果总结</h2>
+  <div class="summary-grid">
+    <div class="summary-card green">
+      <div class="number">20</div>
+      <div class="label">编译输出行数</div>
+    </div>
+    <div class="summary-card blue">
+      <div class="number">14</div>
+      <div class="label">实体关系数</div>
+    </div>
+    <div class="summary-card yellow">
+      <div class="number">5</div>
+      <div class="label">时间线事件</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top: 1.5rem;">
+    <h3>关键发现</h3>
+    <ul style="margin-left: 1.5rem; margin-top: 0.5rem; color: var(--muted);">
+      <li><strong style="color: var(--text);">编译器</strong> 成功从长文章中提取关键信息并结构化，包含融资、人员、合作伙伴等多维度更新</li>
+      <li><strong style="color: var(--text);">时间线</strong> 准确识别了从 2020 年创立到 2024 年 Series A 的关键里程碑</li>
+      <li><strong style="color: var(--text);">实体提取</strong> 识别了人物、公司、投资机构之间的多层关系网络</li>
+      <li><strong style="color: var(--text);">总耗时</strong> 42525ms，适用于实时交互场景</li>
+    </ul>
+  </div>
+
+  <p class="footer">生成时间: 2026-04-13T10:55:22.888Z | ex-brain v0.2.3 + @ax-llm/ax</p>
+</div>
+</body>
+</html>
