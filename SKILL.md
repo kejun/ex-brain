@@ -244,7 +244,8 @@ ebrain list --type company --json | jq '.[] | .slug'
 - **Database**: seekdb (embedded database file)
 - **Runtime**: Bun or Node.js
 - **Embedding**: Local Hash or OpenAI Compatible API
-- **LLM**: For smart compilation, timeline extraction, entity linking
+- **LLM**: Ax Signature + GEPA framework (`@ax-llm/ax`) for smart compilation, timeline extraction, entity linking with structured `f.json()` output
+- **AI Adapter**: Custom Ax adapter with DashScope compatibility (`enable_thinking: false`)
 
 ## References
 

@@ -7,21 +7,25 @@
 1. **智能编译 (Smart Compilation)** - 分析新信息语义，智能更新 compiled truth
 2. **时间线管理 (Timeline Management)** - 从非结构化文本提取事件，记录历史
 
+> **v0.2.3 更新**: AI 模块已全面升级为 Ax Signature + GEPA 框架，替换了所有手写 prompt。
+
 ## 新增文件
 
 ### `src/ai/compiler.ts`
-核心编译器，提供：
+核心编译器（基于 Ax Signature），提供：
 - `compileTruth()` - 智能编译函数
 - 信息类型分类: status_update, new_event, correction, confirmation, new_entity
 - 智能合并逻辑: 追加、更新、替换、冲突处理
 - 自动时间线提取
+- Ax `f.json()` 结构化输出，支持多行 markdown
 
 ### `src/ai/timeline-extractor.ts`
-时间线提取器，提供：
+时间线提取器（基于 Ax Signature），提供：
 - `extractTimelineEvents()` - 事件提取函数
 - 多格式日期解析: ISO, 中文, 英文月份, 相对日期
 - LLM 语义提取 + Regex 备用方案
 - 事件重要性分级
+- Ax `f.json()` 结构化输出，支持中文日期解析
 
 ### `src/commands/compile-cmd.ts`
 CLI 命令：

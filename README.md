@@ -14,7 +14,7 @@ CLI personal knowledge base built on [seekdb](https://docs.seekdb.ai/), featurin
 - **Hybrid Search** - Full-text search + vector semantic queries
 - **Entity Linking** - Auto-detect entities and create linked pages
 
-<img src="https://mdn.alipayobjects.com/huamei_ytl0i7/afts/img/A*TqdfTZ-yCPwAAAAAgBAAAAgAejCYAQ/original" width="800">
+<img src="https://mdn.alipayobjects.com/huamei_ytl0i7/afts/img/A*jyPOT4CzwL0AAAAAgBAAAAgAejCYAQ/original" width="800">
 
 ## Data Collection
 

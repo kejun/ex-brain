@@ -9,7 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **LLM Client Module** (`src/ai/llm-client.ts`): Unified LLM calling with retry mechanism (exponential backoff, max 3 retries), error classification (APIError/TimeoutError/RateLimitError), and common `resolveApiKey` and `callLLM` functions.
+- **Ax Framework Integration** (`@ax-llm/ax`): Replaced all handwritten prompts with Ax Signature + GEPA optimization framework for better structured output.
+- **Ax Adapter** (`src/ai/ax-adapter.ts`): New LLM adapter with `enable_thinking: false` fix for DashScope compatibility.
+- **Integration Tests** (`src/ai/integration.test.ts`): 11 end-to-end tests covering compile, timeline, entity extraction, and full import workflow.
+- **Benchmark Tools** (`benchmark.ts`): Visual HTML report generation for performance tracking.
 - **Database Error Handling**: Added `DbError`, `wrapDbError`, and `DbErrorCategory` types in `src/db/errors.ts` for unified error handling across database operations.
 - **Batch Operations**: Performance optimizations for `embedAll`, `timelineAddBatch`, and import commands with bulk operations.
 - **CLI Output Utilities** (`src/utils/cli-output.ts`): Colorful, structured CLI output with:
@@ -26,31 +29,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **AI Module Refactoring**: Refactored `compiler.ts`, `timeline-extractor.ts`, and `entity-link.ts` to use the unified LLM client.
-- **API Key Resolution**: Centralized API key resolution logic in `llm-client.ts`.
-- **Database Client**: Added retry mechanism with automatic reconnection. DB logs redirected to stderr for cleaner output.
-- **CLI Commands**: Improved output formatting for `put`, `delete`, `ingest`, `import`, `embed`, `stats` commands with detailed progress and status information.
+- **AI Module Major Refactor**: Replaced all AI modules with Ax Signature framework:
+  - `compiler.ts`: Ax Signature with `f.json()` output for multi-line markdown support
+  - `entity-link.ts`: Ax Signature with `f.json()` output + Chinese entity support
+  - `timeline-extractor.ts`: Ax Signature with `f.json()` output + Chinese date parsing
+  - Deleted `llm-client.ts` (200 lines of manual fetch/retry/timeout replaced by Ax)
+  - 44+ unit tests passing, 11 new integration tests
 - **Entity Extraction Pipeline**:
+  - Fixed entity extraction skipping pages with tags (removed `.filter()`)
+  - Fixed Ax `.max()` validation blocking long content inputs
+  - Fixed entity-link `parseRelations` handling Chinese field names from LLM
   - Confidence threshold filtering (configurable, default 0.7)
   - Graceful error handling — extraction failures no longer crash the entire operation
   - Detailed entity creation and linking summaries in CLI output
   - Improved changeType mapping for proper entity type classification
   - Date parsing improvements and importance field support
 - **Multi-Layer Context for LLM Query**: `ebrain query --llm` now builds richer context from page content, raw documents, and semantically-filtered linked pages (incoming and outgoing).
+- **Database Client**: Added retry mechanism with automatic reconnection. DB logs redirected to stderr for cleaner output.
+- **CLI Commands**: Improved output formatting for `put`, `delete`, `ingest`, `import`, `embed`, `stats` commands with detailed progress and status information.
 - **MCP Server**: Added global error handling for all MCP tools.
 - **Database Operations**: Added `db.close()` before process exit to attempt data flush.
 
 ### Fixed
 
-- Entity type mapping (changeType) for proper info type classification.
-- Confidence threshold filtering for entity extraction.
-- Native library errors (OB_ABORT) now display clearly without being overwritten by spinner.
-- JSON parse errors caused by special characters (single quotes, etc.) in search queries.
-- LLM JSON response parsing — handles unterminated strings and other malformed output.
+- Entity extraction skipping pages that already have tags (removed incorrect `.filter()`)
+- Ax `.max()` validation blocking long content inputs
+- Entity-link `parseRelations` handling Chinese field names from LLM output
+- Entity type mapping (changeType) for proper info type classification
+- Confidence threshold filtering for entity extraction
+- Native library errors (OB_ABORT) now display clearly without being overwritten by spinner
+- JSON parse errors caused by special characters (single quotes, etc.) in search queries
+- LLM JSON response parsing — handles unterminated strings and other malformed output
 
 ### Known Issues
 
 - seekdb embedded library may return exit code 139 (SIGSEGV) on process exit on macOS. This is a known issue and JSON output remains valid. Use remote mode (`EBRAIN_SEEKDB_HOST`) for stable exit codes, or use `ebrain import --skip-index` to skip vector indexing during bulk imports.
+
+### Breaking Changes
+
+- **AI Module Architecture**: Complete replacement of handwritten prompts with Ax Signature framework. All AI modules (`compiler.ts`, `entity-link.ts`, `timeline-extractor.ts`) now use `@ax-llm/ax` with `f.json()` structured output. The old `llm-client.ts` has been removed.
 
 ## [0.1.0] - 2024-04-09
 
