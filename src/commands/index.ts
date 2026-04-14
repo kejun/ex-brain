@@ -544,10 +544,14 @@ Examples:
           }
           
           // Collect multi-layer context (primary + raw data + linked pages scored by relevance)
-          progress.update(`Loading pages, raw documents, and linked content...`);
           // ~100KB char budget ≈ 25K tokens, safe for most models
           const MAX_CONTEXT_CHARS = 100_000;
-          const { sections, totalChars, stats } = await collectContextForLLM(repo, topHits, question, MAX_CONTEXT_CHARS);
+          const ctxStart = Date.now();
+          progress.update(`Loading page content...`);
+          const { sections, totalChars, stats } = await collectContextForLLM(repo, topHits, question, MAX_CONTEXT_CHARS, (stage) => {
+            progress.update(`Loading ${stage}...`);
+          });
+          const ctxDuration = formatDuration(Date.now() - ctxStart);
           
           if (sections.length === 0) {
             progress.stop();
@@ -556,16 +560,22 @@ Examples:
             return;
           }
           
-          progress.update(`Generating answer from ${stats.primaryPages} page(s), ${stats.rawDocs} raw doc(s), ${stats.linkedPages} linked page(s)...`);
+          progress.update(`Loaded ${stats.primaryPages} page(s), ${stats.rawDocs} raw doc(s), ${stats.linkedPages} linked page(s) (${ctxDuration}). Generating answer...`);
           const startTime = Date.now();
           
-          const answer = await generateAnswerWithContext(question, sections, stats, settings.llm);
+          // Stop spinner before streaming output
+          progress.stop();
+          process.stderr.write("\n");
+          
+          const { answer, ok } = await generateAnswerWithStream(question, sections, stats, settings.llm);
+          
+          if (!ok) {
+            // If streaming failed, answer contains the error message
+            console.log(answer);
+            return;
+          }
           
           const duration = formatDuration(Date.now() - startTime);
-          progress.succeed(`Answer generated (${duration}, context: ${(totalChars / 1024).toFixed(1)}KB)`);
-          
-          // Output answer as markdown
-          console.log("\n" + answer);
           
           // Show sources breakdown
           console.log("\n---\n**Sources:**\n");
@@ -1668,6 +1678,7 @@ async function collectContextForLLM(
   hits: Array<{ slug: string; title: string; score: number }>,
   question: string,
   maxChars: number,
+  onProgress?: (stage: string) => void,
 ): Promise<{ sections: ContextSection[]; totalChars: number; stats: ContextStats }> {
   const sections: ContextSection[] = [];
   let totalChars = 0;
@@ -1700,6 +1711,7 @@ async function collectContextForLLM(
   }
 
   // Layer 1: Primary pages (compiledTruth + timeline)
+  onProgress?.('page content');
   for (const hit of hits) {
     const page = await repo.getPage(hit.slug);
     if (!page) continue;
@@ -1726,6 +1738,7 @@ async function collectContextForLLM(
   }
 
   // Layer 2: Raw data (original documents)
+  onProgress?.('raw documents');
   for (const hit of hits) {
     try {
       const rawRows = await repo.readRaw(hit.slug) as Array<{ source: string; data: unknown; fetchedAt?: string }>;
@@ -1753,7 +1766,7 @@ async function collectContextForLLM(
   }
 
   // Layer 3: Linked pages — SEMANTICALLY SCORED against the question
-  // Only include linked pages that are actually relevant to what the user asked.
+  onProgress?.('linked pages');
   const allLinkedSlugs = new Set<string>();
   for (const hit of hits) {
     try {
@@ -1878,6 +1891,146 @@ interface ContextStats {
 
 /**
  * Build LLM prompt from collected context sections and generate answer.
+ */
+async function generateAnswerWithStream(
+  question: string,
+  sections: ContextSection[],
+  stats: ContextStats,
+  llm: ResolvedLLM,
+): Promise<{ answer: string; ok: boolean }> {
+  const apiKey = llm.apiKey || process.env[llm.apiKeyEnv] || "";
+  if (!apiKey) {
+    return { answer: "Error: LLM API key not configured.", ok: false };
+  }
+
+  if (sections.length === 0) {
+    return { answer: "知识库中没有找到相关内容。", ok: true };
+  }
+
+  // Build context sections with clear labels
+  const contextParts: string[] = [];
+  let sectionIndex = 0;
+
+  // Group by type for cleaner output
+  const primarySections = sections.filter(s => s.type === 'primary');
+  const rawSections = sections.filter(s => s.type === 'raw_data');
+  const linkedSections = sections.filter(s => s.type === 'linked');
+
+  function renderSections(group: ContextSection[], header: string) {
+    if (group.length === 0) return;
+    contextParts.push(`## ${header}\n`);
+    for (const s of group) {
+      sectionIndex++;
+      contextParts.push(`### [${sectionIndex}] ${s.title} — ${s.label}\n**Slug:** ${s.slug}\n\n${s.content}\n`);
+    }
+    contextParts.push('');
+  }
+
+  renderSections(primarySections, '页面正文');
+  renderSections(rawSections, '原始文档');
+  renderSections(linkedSections, '关联页面');
+
+  const context = contextParts.join('\n');
+
+  const prompt = `你是一个知识库助手，请根据提供的知识库内容回答问题。
+
+## 问题
+${question}
+
+## 知识库内容
+
+${context}
+
+## 回答要求
+- 仅基于提供的知识库内容回答，不要编造信息
+- 如果知识库中没有相关信息，请明确说明
+- 引用来源时使用 [[slug|标题]] 的格式
+- 使用清晰的 markdown 格式
+- 如果涉及时间线信息，请在回答中体现
+- 区分哪些信息来自「页面正文」、哪些来自「原始文档」、哪些来自「关联页面」
+- 语言与提问保持一致（中文提问用中文回答，英文提问用英文回答）
+
+## 回答`;
+
+  try {
+    const resp = await fetch(
+      llm.baseURL.endsWith("/") ? llm.baseURL + "chat/completions" : llm.baseURL + "/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: llm.model,
+          stream: true,
+          messages: [
+            {
+              role: "system",
+              content: "你是一个专业的知识库助手，基于提供的知识库内容准确回答问题。引用来源时使用 [[slug|标题]] 格式。回答要条理清晰，区分信息来源。",
+            },
+            { role: "user", content: prompt },
+          ],
+          temperature: 0.3,
+          max_tokens: 4096,
+        }),
+      },
+    );
+
+    if (!resp.ok) {
+      const text = await resp.text();
+      return { answer: `Error: LLM API failed (${resp.status}): ${text.slice(0, 200)}`, ok: false };
+    }
+
+    if (!resp.body) {
+      return { answer: "Error: No response body from LLM API.", ok: false };
+    }
+
+    // Stream the response
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let fullAnswer = "";
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      // Keep the last incomplete line in buffer
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed === "data: [DONE]") continue;
+        if (!trimmed.startsWith("data: ")) continue;
+
+        try {
+          const json = JSON.parse(trimmed.slice(6));
+          const content = json.choices?.[0]?.delta?.content;
+          if (content) {
+            process.stdout.write(content);
+            fullAnswer += content;
+          }
+        } catch {
+          // Skip malformed SSE data
+        }
+      }
+    }
+
+    // Add a newline after streaming completes
+    process.stdout.write("\n");
+
+    return { answer: fullAnswer || "(No answer generated)", ok: true };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return { answer: `Error: ${msg}`, ok: false };
+  }
+}
+
+/**
+ * @deprecated Use generateAnswerWithStream instead
  */
 async function generateAnswerWithContext(
   question: string,
