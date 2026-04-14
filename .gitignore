@@ -14,6 +14,7 @@ coverage
 logs
 _.log
 report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
+*.jsonl
 
 # dotenv environment variable files
 .pi
@@ -41,3 +42,6 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Binary files
 bin/
+
+code-review-*.*
+pi-session-*.html
