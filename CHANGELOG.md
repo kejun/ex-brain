@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-04-14
+
+### Changed
+
+- **`ebrain query --llm` 响应状态提示**：在内容加载完成后显示 ✓ 状态，LLM 连接阶段显示 💭 Connecting 提示，流式输出前显示 ✦ Streaming 提示，消除等待时的空白感。
+
+### Performance
+
+- **关闭 LLM thinking 模式**：在 API 请求中发送 `thinking: { type: "disabled" }` 参数，避免模型输出前进行推理思考，显著降低首 token 延迟。
+- **添加 30s 超时保护**：LLM API 请求增加 `AbortSignal.timeout(30_000)`，防止无响应时无限等待。
+
 ## [0.2.4] - 2026-04-14
 
 ### Added

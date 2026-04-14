@@ -560,12 +560,8 @@ Examples:
             return;
           }
           
-          progress.update(`Loaded ${stats.primaryPages} page(s), ${stats.rawDocs} raw doc(s), ${stats.linkedPages} linked page(s) (${ctxDuration}). Generating answer...`);
+          progress.succeed(`Loaded ${stats.primaryPages} page(s), ${stats.rawDocs} raw doc(s), ${stats.linkedPages} linked page(s) (${ctxDuration})`);
           const startTime = Date.now();
-          
-          // Stop spinner before streaming output
-          progress.stop();
-          process.stderr.write("\n");
           
           const { answer, ok } = await generateAnswerWithStream(question, sections, stats, settings.llm);
           
@@ -1958,9 +1954,23 @@ ${context}
 
 ## 回答`;
 
+  // Disable thinking/reasoning mode to reduce latency
+  const disableThinking: Record<string, unknown> = {};
+  // OpenAI/compatible: extra_body for thinking disable
+  // DeepSeek: use extra_body to disable thinking
+  // Many providers ignore unknown fields, so this is safe to always include
+  const extraBody: Record<string, unknown> = {
+    thinking: { type: "disabled" },
+  };
+
   try {
+    const url = llm.baseURL.endsWith("/") ? llm.baseURL + "chat/completions" : llm.baseURL + "/chat/completions";
+    
+    // Show thinking indicator while waiting for first token
+    process.stderr.write(`\x1b[35m💭\x1b[0m \x1b[2mConnecting to ${llm.model}...\x1b[0m\n`);
+    
     const resp = await fetch(
-      llm.baseURL.endsWith("/") ? llm.baseURL + "chat/completions" : llm.baseURL + "/chat/completions",
+      url,
       {
         method: "POST",
         headers: {
@@ -1979,24 +1989,38 @@ ${context}
           ],
           temperature: 0.3,
           max_tokens: 4096,
+          ...disableThinking,
+          extra_body: extraBody,
+          // Also send thinking disable as top-level for providers that support it
+          thinking: { type: "disabled" },
         }),
+        // Abort if no response within 30s
+        signal: AbortSignal.timeout(30_000),
       },
     );
 
     if (!resp.ok) {
       const text = await resp.text();
+      // Clear the thinking indicator line
+      process.stderr.write("\r\x1b[K");
       return { answer: `Error: LLM API failed (${resp.status}): ${text.slice(0, 200)}`, ok: false };
     }
 
     if (!resp.body) {
+      process.stderr.write("\r\x1b[K");
       return { answer: "Error: No response body from LLM API.", ok: false };
     }
+
+    // Clear thinking indicator, show streaming status
+    process.stderr.write("\r\x1b[K");
+    process.stderr.write(`\x1b[32m✦\x1b[0m \x1b[2mStreaming response...\x1b[0m\n`);
 
     // Stream the response
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
     let fullAnswer = "";
     let buffer = "";
+    let tokenCount = 0;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -2018,6 +2042,7 @@ ${context}
           if (content) {
             process.stdout.write(content);
             fullAnswer += content;
+            tokenCount++;
           }
         } catch {
           // Skip malformed SSE data
