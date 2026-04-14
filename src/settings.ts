@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 import { z } from "zod";
 import { fileExists, readTextFile } from "./markdown/io";
 
-const SETTINGS_DIR = join(homedir(), ".ebrain");
+export const SETTINGS_DIR = join(homedir(), ".ebrain");
 export const SETTINGS_PATH = join(SETTINGS_DIR, "settings.json");
 export const DEFAULT_DB_PATH = resolve(SETTINGS_DIR, "data", "ebrain.db");
 
@@ -150,6 +150,54 @@ export async function readSettingsFile(): Promise<unknown | null> {
   }
 }
 
+/**
+ * Generate a minimal settings.json if it doesn't already exist.
+ * Returns true if a new file was created.
+ */
+export async function createDefaultSettings(): Promise<boolean> {
+  if (await fileExists(SETTINGS_PATH)) {
+    return false;
+  }
+
+  const { mkdirSync, writeFileSync } = await import("node:fs");
+  mkdirSync(SETTINGS_DIR, { recursive: true });
+
+  // All fields present but empty — user fills in their values
+  const defaults = {
+    db: {
+      path: "",
+      remote: {
+        host: "",
+        port: 0,
+        user: "",
+        password: "",
+        database: "",
+        tenant: "",
+      },
+    },
+    embed: {
+      provider: "hash",
+      baseURL: "",
+      model: "",
+      dimensions: 0,
+      apiKey: "",
+      apiKeyEnv: "",
+    },
+    llm: {
+      baseURL: "",
+      model: "",
+      apiKey: "",
+      apiKeyEnv: "",
+    },
+    extraction: {
+      confidenceThreshold: 0.7,
+    },
+  };
+
+  writeFileSync(SETTINGS_PATH, JSON.stringify(defaults, null, 2) + "\n", "utf-8");
+  return true;
+}
+
 export function resolveSettings(parsed: z.infer<typeof SettingsSchema>): ResolvedSettings {
   const dbConf = parsed.db ?? {};
   const remoteConf = dbConf.remote ?? {};
@@ -215,7 +263,8 @@ function resolveExtraction(conf: { confidenceThreshold?: number }): ResolvedExtr
 // ---------------------------------------------------------------------------
 
 function nonEmpty(val: string | undefined, fallback: string): string {
-  return val?.trim() ?? fallback;
+  const trimmed = val?.trim();
+  return trimmed || fallback;
 }
 
 function numOr(val: number | string | undefined, fallback: number): number {

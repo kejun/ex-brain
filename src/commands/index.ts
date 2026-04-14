@@ -34,6 +34,7 @@ import {
   subItem,
   keyValue,
   header,
+  separator,
   createSpinner,
   formatCount,
   type ProgressSpinner,
@@ -1483,27 +1484,106 @@ Examples:
 
   program
     .command("init")
-    .description("initialize the ebrain database")
+    .description("initialize ebrain: create config, database, and show setup guide")
     .addHelpText(
       "after",
       `
 Examples:
   ebrain init
+  ebrain init --db ./my.db
 `,
     )
     .action(async () => {
-      await withRepo(program, async () => {
-        const settings = await loadSettings();
-        const dbPath = program.opts().db ?? settings.dbPath;
-        
-        success(`Database initialized`);
-        keyValue("Path", dbPath);
-        
-        print(program, {
-          ok: true,
-          dbPath,
-        });
+      const jsonOut = isJson(program);
+      const settings = await loadSettings();
+      const cliDb = program.opts().db;
+      const dbPath = cliDb ?? settings.dbPath;
+
+      if (!jsonOut) {
+        header("ebrain init");
+      }
+
+      // Step 1: Create settings.json if it doesn't exist
+      const { createDefaultSettings } = await import("../settings");
+      const settingsCreated = await createDefaultSettings();
+
+      if (!jsonOut) {
+        if (settingsCreated) {
+          success(`Created config: ${SETTINGS_PATH}`);
+        } else {
+          success(`Config already exists: ${SETTINGS_PATH}`);
+        }
+      }
+
+      // Step 2: Check or initialize database
+      const dbExists = await fileExists(dbPath);
+      let dbInitialized = false;
+
+      if (dbExists) {
+        // Database already exists, skip connection attempt to avoid
+        // noisy errors (e.g. embedding function key mismatch)
+        if (!jsonOut) {
+          success(`Database already exists: ${dbPath}`);
+        }
+        dbInitialized = true;
+      } else {
+        // Try to create it without collection — embedding config may not be ready
+        try {
+          const db = await BrainDb.connect(dbPath, settings, { skipCollection: true });
+          await db.close();
+          await new Promise((r) => setTimeout(r, 200));
+          dbInitialized = true;
+          if (!jsonOut) {
+            success(`Database initialized: ${dbPath}`);
+          }
+        } catch {
+          if (!jsonOut) {
+            warning(`Database will be auto-created on first use`);
+          }
+        }
+      }
+
+      // Step 3: Show setup guide
+      if (!jsonOut) {
+        console.log("");
+        separator();
+        info("Quick Start Guide");
+        console.log("");
+
+        subItem("1. Configure LLM (for AI queries):", 0);
+        subItem(`   Edit ${SETTINGS_PATH}`, 4);
+        subItem(`   Set llm.baseURL to your OpenAI-compatible API endpoint`, 4);
+        subItem(`   Set llm.apiKey or export DASHSCOPE_API_KEY`, 4);
+        console.log("");
+
+        subItem("2. Add your first page:", 0);
+        subItem("   echo '# Hello' | ebrain put hello --stdin", 4);
+        console.log("");
+
+        subItem("3. Import a directory of markdown files:", 0);
+        subItem("   ebrain import ./docs", 4);
+        console.log("");
+
+        subItem("4. Query with AI:", 0);
+        subItem('   ebrain query "What did we ship in Q4?" --llm', 4);
+        console.log("");
+
+        subItem("5. Visualize your knowledge graph:", 0);
+        subItem("   ebrain graph", 4);
+        console.log("");
+
+        separator();
+      }
+
+      print(program, {
+        ok: true,
+        settingsPath: SETTINGS_PATH,
+        settingsCreated,
+        dbPath,
+        dbInitialized,
       });
+
+      process.exit(0);
     });
 
   program

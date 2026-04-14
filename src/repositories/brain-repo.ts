@@ -347,8 +347,13 @@ export class BrainRepository {
         metadatas: [meta],
       });
     } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      // Dimension mismatch means the collection was created with a different
+      // embedding model. This is non-critical — pages still work, just no search.
+      if (msg.includes("Dimension mismatch")) {
+        return;
+      }
       const dbError = wrapDbError(error, "syncPageToSearch", { slug });
-      logDbError(dbError);
       // Don't throw - sync failure shouldn't break the main flow
       console.warn(`[BrainRepo] syncPageToSearch failed for ${slug}: ${dbError.message}`);
     }
@@ -384,8 +389,11 @@ export class BrainRepository {
         metadatas: metas,
       });
     } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg.includes("Dimension mismatch")) {
+        return;
+      }
       const dbError = wrapDbError(error, "syncPagesToSearch", { count: slugs.length });
-      logDbError(dbError);
       // Don't throw - sync failure shouldn't break the main flow
       console.warn(`[BrainRepo] syncPagesToSearch failed: ${dbError.message}`);
     }

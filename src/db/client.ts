@@ -107,7 +107,11 @@ export class BrainDb {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  static async connect(dbPath: string, settings?: ResolvedSettings): Promise<BrainDb> {
+  static async connect(
+    dbPath: string,
+    settings?: ResolvedSettings,
+    options?: { skipCollection?: boolean },
+  ): Promise<BrainDb> {
     try {
       const client = settings?.remote
         ? await BrainDb.openRemoteClient(settings.remote)
@@ -120,6 +124,15 @@ export class BrainDb {
 
       for (const sql of SQL_SCHEMA) {
         await client.execute(sql);
+      }
+
+      // Skip collection creation for init (embedding config may not be ready)
+      if (options?.skipCollection) {
+        const db = new BrainDb(dbPath, client, null as unknown as Collection);
+        db._isConnected = true;
+        db._lastConnectedAt = new Date();
+        console.error("\x1b[32m[DB] Connected successfully\x1b[0m");
+        return db;
       }
 
       const pagesCollection = await client.getOrCreateCollection({
