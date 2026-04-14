@@ -1710,11 +1710,15 @@ async function collectContextForLLM(
     return false;
   }
 
+  // Cache pages fetched in Layer 1 to avoid redundant DB calls in Layer 3
+  const pageCache = new Map<string, NonNullable<Awaited<ReturnType<typeof repo.getPage>>>>();
+
   // Layer 1: Primary pages (compiledTruth + timeline)
   onProgress?.('page content');
   for (const hit of hits) {
     const page = await repo.getPage(hit.slug);
     if (!page) continue;
+    pageCache.set(hit.slug, page);
 
     const parts: string[] = [];
     if (page.compiledTruth?.trim()) {
@@ -1765,7 +1769,8 @@ async function collectContextForLLM(
     }
   }
 
-  // Layer 3: Linked pages — SEMANTICALLY SCORED against the question
+  // Layer 3: Linked pages — score using cached data + keyword matching
+  // No second repo.query() call needed — reuse hits scores + keyword fallback
   onProgress?.('linked pages');
   const allLinkedSlugs = new Set<string>();
   for (const hit of hits) {
@@ -1780,26 +1785,27 @@ async function collectContextForLLM(
   }
 
   if (allLinkedSlugs.size > 0) {
-    // Score linked pages using broad semantic search.
-    // Query a wide set of pages, then intersect with linked slugs.
-    const broadLimit = Math.min(200, Math.max(50, allLinkedSlugs.size));
-    const broadResults = await repo.query(question, broadLimit);
-    const semanticScoreMap = new Map(broadResults.map(h => [h.slug, h.score]));
-
-    // Keyword-based fallback scoring for linked pages without embedding scores
+    // Score: use semantic scores from initial hits (already cached), keyword for rest
+    const semanticScoreMap = new Map(hits.map(h => [h.slug, h.score]));
     const keywordScores = new Map<string, number>();
     for (const linkedSlug of allLinkedSlugs) {
       if (semanticScoreMap.has(linkedSlug)) continue;
-      try {
+      // Use cached page if available, only fetch if not in cache
+      const cached = pageCache.get(linkedSlug);
+      if (cached) {
+        const text = `${cached.title} ${cached.compiledTruth}`.slice(0, 2000);
+        keywordScores.set(linkedSlug, computeKeywordRelevance(text, question));
+      } else {
         const page = await repo.getPage(linkedSlug);
         if (page) {
+          pageCache.set(linkedSlug, page);
           const text = `${page.title} ${page.compiledTruth}`.slice(0, 2000);
           keywordScores.set(linkedSlug, computeKeywordRelevance(text, question));
         }
-      } catch { /* ignore */ }
+      }
     }
 
-    // Combine scores: semantic first, then keyword fallback
+    // Combine scores
     const scoredLinked = [...allLinkedSlugs].map(slug => ({
       slug,
       score: semanticScoreMap.get(slug) ?? keywordScores.get(slug) ?? 0,
@@ -1811,11 +1817,11 @@ async function collectContextForLLM(
       .filter(s => s.score >= MIN_LINKED_SCORE)
       .sort((a, b) => b.score - a.score);
 
-    // Fetch content for relevant linked pages (respecting budget)
+    // Add linked pages (already cached in pageCache, no extra fetch needed)
     for (const linked of relevantLinked) {
       if (totalChars >= maxChars) break;
 
-      const linkedPage = await repo.getPage(linked.slug);
+      const linkedPage = pageCache.get(linked.slug);
       if (!linkedPage || !linkedPage.compiledTruth?.trim()) continue;
 
       const remaining = maxChars - totalChars;
