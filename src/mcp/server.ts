@@ -4,6 +4,7 @@ import { z } from "zod";
 import { BrainDb } from "../db/client";
 import { BrainRepository } from "../repositories/brain-repo";
 import { loadSettings } from "../settings";
+import { loadDocument, type DocumentKind } from "../markdown/document-loader";
 
 // ============================================================================
 // Error Handling Utilities
@@ -130,6 +131,7 @@ export const TOOL_MANIFEST = [
   "brain_put",
   "brain_delete",
   "brain_ingest",
+  "brain_ingest_document",
   "brain_link",
   "brain_backlinks",
   "brain_timeline",
@@ -287,6 +289,152 @@ export async function startMcpServer(dbPath: string): Promise<void> {
       }),
     },
     withErrorHandling("brain_ingest", brainIngestHandler),
+  );
+
+  // -- brain_ingest_document: ingest a PDF/Word/HTML/text file or http(s) URL
+  const brainIngestDocumentHandler = async ({
+    source,
+    slug,
+    type,
+    format,
+    max_bytes,
+    timeout_ms,
+  }: {
+    source: string;
+    slug?: string;
+    type?: string;
+    format?: DocumentKind;
+    max_bytes?: number;
+    timeout_ms?: number;
+  }) => {
+    const loaded = await loadDocument(source, {
+      forceKind: format,
+      maxBytes: max_bytes,
+      fetchTimeoutMs: timeout_ms,
+    });
+    const slugBase =
+      loaded.fileName
+        .replace(/\.[^.]+$/, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9\u4e00-\u9fff]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 80) || "document";
+    const finalSlug = slug ?? `ingest/${slugBase}`;
+    const finalType = type ?? loaded.kind;
+    const page = await repo.putPage({
+      slug: finalSlug,
+      type: finalType,
+      title: loaded.fileName,
+      compiledTruth: loaded.text,
+      timeline: "",
+      frontmatter: {
+        sourceFile: loaded.source,
+        sourceType: loaded.sourceType,
+        sourceKind: loaded.kind,
+        sourceMimeType: loaded.mimeType,
+        sourceBytes: loaded.bytes,
+        sourceFileName: loaded.fileName,
+        ...loaded.metadata,
+      },
+    });
+    try {
+      await repo.timelineAdd({
+        pageSlug: finalSlug,
+        date: new Date().toISOString().slice(0, 10),
+        source: finalType,
+        summary: `Ingested ${loaded.kind} ${loaded.fileName}`,
+        detail:
+          loaded.sourceType === "url" ? `Source URL: ${loaded.source}` : "",
+      });
+    } catch {
+      /* non-fatal */
+    }
+    try {
+      await repo.writeRaw(finalSlug, loaded.sourceType, {
+        fileName: loaded.fileName,
+        sourceRef: loaded.source,
+        kind: loaded.kind,
+        mimeType: loaded.mimeType,
+        bytes: loaded.bytes,
+        metadata: loaded.metadata,
+        ingestedAt: new Date().toISOString(),
+      });
+    } catch {
+      /* non-fatal */
+    }
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              ok: true,
+              slug: finalSlug,
+              kind: loaded.kind,
+              sourceType: loaded.sourceType,
+              sourceRef: loaded.source,
+              fileName: loaded.fileName,
+              mimeType: loaded.mimeType,
+              bytes: loaded.bytes,
+              contentLength: loaded.text.length,
+              page: { slug: page.slug, updatedAt: page.updatedAt },
+              metadata: loaded.metadata,
+            },
+            null,
+            2,
+          ),
+        },
+      ],
+    };
+  };
+
+  server.registerTool(
+    "brain_ingest_document",
+    {
+      description:
+        "Ingest a document (PDF, Word .docx, HTML, JSON, plain text, markdown) from a local file path or http(s) URL. Extracts text content automatically based on file extension or HTTP content-type.",
+      inputSchema: z.object({
+        source: z
+          .string()
+          .describe("Local file path or http(s) URL to ingest."),
+        slug: z
+          .string()
+          .optional()
+          .describe(
+            "Optional explicit page slug. Defaults to 'ingest/<sanitized-filename>'.",
+          ),
+        type: z
+          .string()
+          .optional()
+          .describe("Optional page type override (defaults to detected kind)."),
+        format: z
+          .enum([
+            "text",
+            "markdown",
+            "pdf",
+            "docx",
+            "doc",
+            "html",
+            "json",
+            "unknown",
+          ])
+          .optional()
+          .describe("Force a specific document kind, bypassing auto-detection."),
+        max_bytes: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe("Maximum bytes accepted from URL/file. Default 50MB."),
+        timeout_ms: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe("Network fetch timeout for URLs in ms. Default 30000."),
+      }),
+    },
+    withErrorHandling("brain_ingest_document", brainIngestDocumentHandler),
   );
 
   // ---------------------------------------------------------------------------

@@ -31,8 +31,10 @@
     "commander": "^14.0.3",
     "gray-matter": "^4.0.3",
     "jsonrepair": "^3.13.3",
+    "mammoth": "^1.12.0",
     "pinyin-pro": "^3.28.0",
     "seekdb": "^1.2.0",
+    "unpdf": "^1.6.2",
     "yaml": "^2.8.3",
     "zod": "^4.3.6"
   }
