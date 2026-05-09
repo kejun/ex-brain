@@ -128,6 +128,27 @@ ebrain tag add <slug> <tag>         # idempotent
 ebrain tag remove <slug> <tag>
 ```
 
+### Document Ingestion (PDF / Word / URL)
+
+`ebrain ingest` accepts local files **and** http(s) URLs and auto-extracts text from PDF, Word `.docx`, HTML, JSON, Markdown, and plain text. PDFs are parsed via `unpdf`, Word via `mammoth`, HTML is stripped to text. Source kind is detected from the file extension, HTTP `Content-Type`, or magic bytes.
+
+```bash
+# Local PDF / Word
+ebrain ingest report.pdf
+ebrain ingest meeting-notes.docx
+
+# Remote document (auto-detected from Content-Type)
+ebrain ingest https://example.com/whitepaper.pdf
+
+# Remote HTML article (force the kind if the server lies about Content-Type)
+ebrain ingest https://example.com/article --format html
+
+# Custom slug + dry-run preview
+ebrain ingest report.pdf --slug docs/q4-report --dry-run
+```
+
+Each ingest writes the extracted text to `compiled_truth`, records a timeline event, stores source metadata in the page frontmatter (`sourceFile`, `sourceType`, `sourceKind`, `sourceMimeType`, `sourceBytes`, parser stats), and a structured row in `raw_data` for traceability. See `docs/document-ingestion.md` for the full reference.
+
 ### Knowledge Graph Visualization
 
 ```bash
@@ -169,6 +190,7 @@ Configure in Claude Desktop or other MCP clients:
 | `brain_link` | Create entity link |
 | `brain_timeline_list` | View timeline |
 | `brain_timeline_extract` | Extract timeline events |
+| `brain_ingest_document` | Ingest a PDF / Word / HTML / text file or http(s) URL |
 
 ## Slug Naming Convention
 
@@ -253,3 +275,4 @@ ebrain list --type company --json | jq '.[] | .slug'
 - [Detailed CLI Documentation](./docs/ebrain-cli.md)
 - [Timeline & Compilation Mechanism](./docs/timeline-compiled-truth.md)
 - [Knowledge Graph Commands](./docs/graph-command.md)
+- [Document Ingestion (PDF / Word / URL)](./docs/document-ingestion.md)
