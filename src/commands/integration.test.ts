@@ -21,17 +21,15 @@ async function ebrain(
   options?: { stdin?: string },
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const allArgs = ["--db", dbPath, ...args];
-  try {
-    let p;
-    if (options?.stdin) {
-      p = await $`bun ${CLI} ${allArgs}`.quiet().stdin(options.stdin);
-    } else {
-      p = await $`bun ${CLI} ${allArgs}`.quiet();
-    }
-    return { stdout: p.stdout.toString(), stderr: p.stderr.toString(), exitCode: p.exitCode ?? 0 };
-  } catch (e: any) {
-    return { stdout: e.stdout?.toString() ?? "", stderr: e.stderr?.toString() ?? "", exitCode: e.exitCode ?? 1 };
+  // Use .nothrow() to prevent $ from throwing on non-zero exit codes
+  // (seekdb crashes with exit code 139/134 on process exit)
+  let p;
+  if (options?.stdin) {
+    p = await $`bun ${CLI} ${allArgs}`.quiet().nothrow().stdin(options.stdin);
+  } else {
+    p = await $`bun ${CLI} ${allArgs}`.quiet().nothrow();
   }
+  return { stdout: p.stdout.toString(), stderr: p.stderr.toString(), exitCode: p.exitCode ?? 1 };
 }
 
 function parseJson(output: string): unknown {
@@ -53,7 +51,7 @@ function parseJson(output: string): unknown {
 // Exit code 139 is a known seekdb bug: native cleanup crashes on process exit
 // The CLI output is valid even with exit code 139
 function ok(code: number): boolean {
-  return code === 0 || code === 139;
+  return code === 0 || code === 134 || code === 139;
 }
 
 // ---------------------------------------------------------------------------
@@ -528,29 +526,135 @@ describe("ebrain export", () => {
 });
 
 // ---------------------------------------------------------------------------
-// ingest
+// put with non-markdown files (document auto-detect)
 // ---------------------------------------------------------------------------
 
-describe("ebrain ingest", () => {
-  test("ingests a file", async () => {
+describe("ebrain put — document auto-detect", () => {
+  test("put with a .txt file uses document ingestion path", { timeout: 30000 }, async () => {
     const dbPath = await mkTestDb();
-    const file = join(dirname(dbPath), "ingest-me.txt");
-    await writeFile(file, "Ingested content");
+    const file = join(dirname(dbPath), "test-doc.txt");
+    await writeFile(file, "Plain text document content for ingestion test.");
 
-    const r = await ebrain(dbPath, ["ingest", file, "--type", "doc", "--json"]);
+    const r = await ebrain(dbPath, ["put", "--file", file, "--json"]);
     const result = parseJson(r.stdout) as any;
     expect(result.ok).toBe(true);
-    expect(result.slug).toContain("ingest/ingest-me");
+    expect(result.slug).toContain("ingest/");
+    expect(result.kind).toBe("text");
   });
 
-  test("ingest with --dry-run does not create page", async () => {
+  test("put with --format overrides auto-detect", { timeout: 30000 }, async () => {
     const dbPath = await mkTestDb();
-    const file = join(dirname(dbPath), "ingest-dry.txt");
-    await writeFile(file, "Dry content");
+    const file = join(dirname(dbPath), "unknown-file");
+    await writeFile(file, "Some text content with forced format.");
 
-    await ebrain(dbPath, ["ingest", file, "--type", "doc", "--dry-run"]);
+    const r = await ebrain(dbPath, ["put", "--file", file, "--format", "text", "--json"]);
+    const result = parseJson(r.stdout) as any;
+    expect(result.ok).toBe(true);
+    expect(result.kind).toBe("text");
+  });
 
-    const r = await ebrain(dbPath, ["get", "ingest/ingest-dry"]);
-    expect(r.stderr).toContain("page not found");
+  test("put with a .html file auto-extracts text", { timeout: 30000 }, async () => {
+    const dbPath = await mkTestDb();
+    const html = `<!DOCTYPE html><html><head><title>Test Page</title></head><body><h1>Hello World</h1><p>This is a test paragraph.</p></body></html>`;
+    const file = join(dirname(dbPath), "test-page.html");
+    await writeFile(file, html);
+
+    const r = await ebrain(dbPath, ["put", "--file", file, "--json"]);
+    const result = parseJson(r.stdout) as any;
+    expect(result.kind).toBe("html");
+    expect(result.ok).toBe(true);
+    expect(result.contentLength).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// put — content hash idempotency
+// ---------------------------------------------------------------------------
+
+describe("ebrain put — content hash idempotency", () => {
+  test("re-putting identical markdown file skips side-effects", { timeout: 30000 }, async () => {
+    const dbPath = await mkTestDb();
+    const file = join(dirname(dbPath), "idem.md");
+    const md = `---\ntitle: Hash Test\ntype: note\n---\nThis content should be idempotent.`;
+    await writeFile(file, md);
+
+    // First put
+    const r1 = await ebrain(dbPath, ["put", "hash-test/idem", "--file", file, "--json"]);
+    expect(ok(r1.exitCode)).toBe(true);
+    const res1 = parseJson(r1.stdout) as any;
+    expect(res1.ok).toBe(true);
+    expect(res1.unchanged).toBeUndefined(); // first put, no skip
+
+    // Second put with identical content
+    const r2 = await ebrain(dbPath, ["put", "hash-test/idem", "--file", file, "--json"]);
+    expect(ok(r2.exitCode)).toBe(true);
+    const res2 = parseJson(r2.stdout) as any;
+    expect(res2.ok).toBe(true);
+    expect(res2.unchanged).toBe(true); // should be skipped
+  });
+
+  test("re-putting modified markdown updates normally", { timeout: 30000 }, async () => {
+    const dbPath = await mkTestDb();
+    const file1 = join(dirname(dbPath), "update-v1.md");
+    const file2 = join(dirname(dbPath), "update-v2.md");
+    await writeFile(file1, `---\ntitle: V1\ntype: note\n---\nOriginal content.`);
+    await writeFile(file2, `---\ntitle: V2\ntype: note\n---\nUpdated content.`);
+
+    await ebrain(dbPath, ["put", "hash-test/update", "--file", file1, "--json"]);
+
+    const r = await ebrain(dbPath, ["put", "hash-test/update", "--file", file2, "--json"]);
+    const result = parseJson(r.stdout) as any;
+    expect(result.ok).toBe(true);
+    expect(result.unchanged).toBeUndefined(); // content changed, not skipped
+  });
+
+  test("re-putting identical document file skips side-effects", { timeout: 30000 }, async () => {
+    const dbPath = await mkTestDb();
+    const file = join(dirname(dbPath), "idem-doc.txt");
+    await writeFile(file, "Document content for idempotency test.");
+
+    // First put
+    const r1 = await ebrain(dbPath, ["put", "--file", file, "--json"]);
+    expect(ok(r1.exitCode)).toBe(true);
+    const res1 = parseJson(r1.stdout) as any;
+    expect(res1.ok).toBe(true);
+    expect(res1.unchanged).toBeUndefined();
+
+    // Second put (same file, same content)
+    const r2 = await ebrain(dbPath, ["put", "--file", file, "--json"]);
+    expect(ok(r2.exitCode)).toBe(true);
+    const res2 = parseJson(r2.stdout) as any;
+    expect(res2.ok).toBe(true);
+    expect(res2.unchanged).toBe(true);
+  });
+
+  test("put --dry-run includes contentHash", { timeout: 30000 }, async () => {
+    const dbPath = await mkTestDb();
+    const file = join(dirname(dbPath), "dry-hash.md");
+    await writeFile(file, `---\ntitle: Dry Hash Test\ntype: note\n---\nContent.`);
+
+    const r = await ebrain(dbPath, ["put", "hash-test/dry", "--file", file, "--json", "--dry-run"]);
+    expect(ok(r.exitCode)).toBe(true);
+    const result = parseJson(r.stdout) as any;
+    expect(result.dryRun).toBe(true);
+    expect(result.contentHash).toBeDefined();
+    expect(typeof result.contentHash).toBe("string");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ingest command removed — should fail or redirect
+// ---------------------------------------------------------------------------
+
+describe("ebrain ingest — removed", () => {
+  test("ingest command no longer exists", { timeout: 30000 }, async () => {
+    const dbPath = await mkTestDb();
+    const file = join(dirname(dbPath), "old-ingest.txt");
+    await writeFile(file, "Some content");
+
+    const r = await ebrain(dbPath, ["ingest", file, "--json"]);
+    // Should fail: command not found
+    expect(r.exitCode).not.toBe(0);
+    expect(ok(r.exitCode)).toBe(false);
   });
 });

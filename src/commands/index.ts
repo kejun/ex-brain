@@ -1,5 +1,6 @@
-import { basename, resolve } from "node:path";
+import { basename, extname, resolve } from "node:path";
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { Command } from "commander";
 import { DEFAULT_DB_NAME, inferTypeFromSlug, slugToTitle, normalizeLongSlug, slugify } from "../config";
 import { BrainDb } from "../db/client";
@@ -53,6 +54,14 @@ function isDryRun(opts: Record<string, unknown>): boolean {
   return Boolean(opts.dryRun);
 }
 
+/**
+ * Compute a short SHA-256 hex hash of a string (first 16 chars).
+ * Used for detecting duplicate document ingestion.
+ */
+function contentHash(text: string): string {
+  return createHash("sha256").update(text, "utf8").digest("hex").slice(0, 16);
+}
+
 // Simple progress output to stderr (won't interfere with --json stdout).
 // e.g. "[3/42] import docs/api"
 function progress(label: string, current: number, total: number, json: boolean): void {
@@ -95,12 +104,12 @@ async function applyEntityLinks(
     }
     return { created: 0, linked: 0 };
   }
-  
+
   // Filter by confidence
   const confidenceThreshold = settings.extraction.confidenceThreshold;
   const highConfidence = relations.filter((r) => r.confidence >= confidenceThreshold);
   const ignoredCount = relations.length - highConfidence.length;
-  
+
   if (highConfidence.length === 0) {
     if (!json) {
       if (relations.length > 0) {
@@ -120,7 +129,7 @@ async function applyEntityLinks(
     // 1. Resolve entity slugs (disambiguation)
     const fromCandidate = entityToSlug(r.from.name, r.from.type);
     const toCandidate = entityToSlug(r.to.name, r.to.type);
-    
+
     const fromSlug = await repo.findSimilarSlug(fromCandidate, r.from.name);
     const toSlug = await repo.findSimilarSlug(toCandidate, r.to.name);
 
@@ -145,7 +154,7 @@ async function applyEntityLinks(
     const duration = formatDuration(Date.now() - startTime);
     const entityNames = [...new Set(highConfidence.flatMap((r) => [r.from.name, r.to.name]))];
     spinner.succeed(`Extracted ${entityNames.length} entities: ${entityNames.join(", ")}`);
-    
+
     // Print detailed info
     subItem(`${created} entity pages created`);
     subItem(`${linked} links added`);
@@ -226,23 +235,46 @@ Examples:
 
   // -- page CRUD ------------------------------------------------------------
 
+  // -- put ------------------------------------------------------------------
+  // Auto-detects file type: markdown goes through parsePageMarkdown,
+  // other formats (pdf, docx, html, txt, json) go through loadDocument.
+
+  /** Non-markdown extensions that should use the document ingestion path. */
+  const DOC_EXTENSIONS = new Set([
+    "pdf", "docx", "doc", "html", "htm", "json", "txt", "text",
+  ]);
+
+  /** Whether a file path should be treated as a document (not markdown). */
+  function isDocumentFile(filePath: string, forceKind?: string): boolean {
+    if (forceKind && forceKind !== "markdown") return true;
+    const ext = extname(filePath).toLowerCase().replace(/^\./, "");
+    return DOC_EXTENSIONS.has(ext);
+  }
+
   addDryRun(
     program
       .command("put")
       .argument("[slug]", "page slug (optional; auto-generated if omitted)")
-      .option("--file <path>", "read markdown from file")
+      .option("--file <path>", "read content from file (markdown, pdf, docx, html, txt, json)")
       .option("--stdin", "read markdown from stdin", false)
-      .option("--type <type>", "page type")
-      .option("--title <title>", "page title")
+      .option("--type <type>", "page type override")
+      .option("--title <title>", "page title override")
+      .option("--format <kind>", "force document kind (pdf|docx|html|json|markdown|text) — only needed for --file with non-md files when auto-detect fails")
+      .option("--max-bytes <number>", "max bytes for URL/file ingest", "52428800")
+      .option("--timeout <ms>", "fetch timeout for URLs in ms", "30000")
       .description(
-        "create or update a page (idempotent; upserts by slug). If slug is omitted, it is auto-generated from file name, title, or timestamp.",
+        "create or update a page (idempotent; upserts by slug). Auto-detects file type: markdown is parsed normally, PDF/DOCX/HTML/TXT/JSON are extracted and ingested.",
       )
       .addHelpText(
         "after",
         `
 Examples:
-  ebrain put --file api.md                  # auto-generate slug from file name
+  ebrain put --file api.md                  # markdown → parsePageMarkdown
   ebrain put docs/api --file api.md         # explicit slug
+  ebrain put --file report.pdf              # pdf → auto-extract text
+  ebrain put docs/report --file report.pdf  # explicit slug for pdf
+  ebrain put --file article.docx            # docx → auto-extract text
+  ebrain put --file https://example.com/a.pdf  # URL → download + extract
   cat note.md | ebrain put --stdin          # auto-generate slug from title/timestamp
   ebrain put --title "My Note" --stdin      # auto-generate slug from title
   ebrain put people/john --type person --title "John Doe"
@@ -257,9 +289,173 @@ Examples:
         stdin?: boolean;
         type?: string;
         title?: string;
+        format?: string;
+        maxBytes?: string;
+        timeout?: string;
         dryRun?: boolean;
       },
     ) => {
+      // ── Branch 1: document file (pdf/docx/html/txt/json or URL) ──
+      const forceKind = opts.format as DocumentKind | undefined;
+      if (opts.file && isDocumentFile(opts.file, opts.format)) {
+        const loaded = await loadDocument(opts.file, {
+          forceKind,
+          fetchTimeoutMs: opts.timeout ? Number(opts.timeout) : undefined,
+          maxBytes: opts.maxBytes ? Number(opts.maxBytes) : undefined,
+        });
+        const content = loaded.text;
+        const fileName = loaded.fileName;
+        const kind = loaded.kind;
+        const sourceRef = loaded.source;
+        const sourceType = loaded.sourceType;
+        const mimeType = loaded.mimeType;
+        const bytes = loaded.bytes;
+        const metadata = loaded.metadata;
+
+        let finalSlug = slug;
+        if (!finalSlug) {
+          const nameNoExt = fileName.replace(/\.[^.]+$/, "");
+          const slugBase = normalizeLongSlug(slugify(nameNoExt));
+          finalSlug = `ingest/${slugBase}`;
+        }
+
+        const type = opts.type ?? kind;
+        const title =
+          opts.title ??
+          String(slugToTitle(finalSlug));
+        const hash = contentHash(content);
+        const frontmatter: Record<string, unknown> = {
+          sourceFile: sourceRef,
+          sourceType,
+          sourceKind: kind,
+          sourceMimeType: mimeType,
+          sourceBytes: bytes,
+          sourceFileName: fileName,
+          _contentHash: hash,
+          ...metadata,
+        };
+
+        if (isDryRun(opts)) {
+          print(program, {
+            dryRun: true,
+            action: "put",
+            slug: finalSlug,
+            type,
+            title,
+            kind,
+            sourceType,
+            sourceRef,
+            mimeType,
+            bytes,
+            contentLength: content.length,
+            contentHash: hash,
+            metadata,
+          });
+          return;
+        }
+
+        await withRepo(program, async (repo) => {
+          const jsonOut = isJson(program);
+          const spinner = createSpinner();
+          const startTime = Date.now();
+
+          // Check if content has already been ingested (idempotency)
+          const existingPage = await repo.getPage(finalSlug);
+          const existingHash = existingPage?.frontmatter._contentHash as string | undefined;
+
+          if (existingHash === hash) {
+            if (!jsonOut) {
+              header(`Put: ${fileName}`);
+              success(`Content unchanged — skipped (hash: ${hash})`);
+            }
+            print(program, {
+              ok: true,
+              action: "put",
+              slug: finalSlug,
+              unchanged: true,
+              contentHash: hash,
+            });
+            return;
+          }
+
+          if (!jsonOut) {
+            header(`Put: ${fileName}`);
+            keyValue("Kind", kind);
+            keyValue("Source", sourceRef);
+            if (mimeType) keyValue("Content-Type", mimeType);
+            keyValue("Bytes", String(bytes));
+            if (existingPage) {
+              keyValue("Previous hash", existingHash ?? "none");
+              keyValue("New hash", hash);
+            }
+            spinner.start(`Creating page from ${kind}...`);
+          }
+
+          await repo.putPage({
+            slug: finalSlug,
+            type,
+            title,
+            compiledTruth: content,
+            timeline: "",
+            frontmatter,
+          });
+
+          if (!jsonOut) {
+            spinner.succeed(`Page created: ${finalSlug}`);
+            keyValue("Type", type);
+            keyValue("Content length", `${content.length} chars`);
+          }
+
+          // ── Side-effect operations (only on new/changed content) ──
+          await repo.timelineAdd({
+            pageSlug: finalSlug,
+            date: new Date().toISOString().slice(0, 10),
+            source: type,
+            summary: `Ingested ${kind} ${fileName}`,
+            detail: sourceType === "url" ? `Source URL: ${sourceRef}` : "",
+          });
+
+          try {
+            await repo.writeRaw(finalSlug, sourceType, {
+              fileName,
+              sourceRef,
+              kind,
+              mimeType,
+              bytes,
+              metadata,
+              ingestedAt: new Date().toISOString(),
+            });
+          } catch (err) {
+            if (!jsonOut) {
+              warning(
+                `failed to record raw_data: ${err instanceof Error ? err.message : String(err)}`,
+              );
+            }
+          }
+
+          await applyEntityLinks(repo, finalSlug, content, jsonOut);
+
+          if (!jsonOut) {
+            const duration = formatDuration(Date.now() - startTime);
+            success(`Operation completed in ${duration}`);
+          }
+
+          print(program, {
+            ok: true,
+            action: "put",
+            slug: finalSlug,
+            kind,
+            sourceType,
+            sourceRef,
+            bytes,
+            contentLength: content.length,
+            contentHash: hash,
+          });
+        });
+        return;
+      }
+
+      // ── Branch 2: markdown (stdin or .md file) ──
       const input = await resolveInput(opts.file, opts.stdin ?? false);
       if (!input.trim()) {
         throw new Error(
@@ -267,7 +463,7 @@ Examples:
         );
       }
       const parsed = parsePageMarkdown(input);
-      
+
       // Auto-generate slug if not provided
       let finalSlug = slug;
       if (!finalSlug) {
@@ -285,13 +481,17 @@ Examples:
           finalSlug = `notes/${timestamp}`;
         }
       }
-      
+
       const type =
         opts.type ??
         String(parsed.frontmatter.type ?? inferTypeFromSlug(finalSlug));
       const title =
         opts.title ??
         String(parsed.frontmatter.title ?? slugToTitle(finalSlug));
+
+      // Compute content hash and embed in frontmatter for idempotency
+      const hash = contentHash(parsed.compiledTruth);
+      parsed.frontmatter._contentHash = hash;
 
       if (isDryRun(opts)) {
         print(program, {
@@ -301,6 +501,7 @@ Examples:
           type,
           title,
           contentLength: parsed.compiledTruth.length,
+          contentHash: hash,
           hasTimeline: !!parsed.timeline,
           frontmatterKeys: Object.keys(parsed.frontmatter),
         });
@@ -311,12 +512,35 @@ Examples:
         const jsonOut = isJson(program);
         const spinner = createSpinner();
         const startTime = Date.now();
-        
+
+        // Check if content is unchanged (idempotency)
+        const existingPage = await repo.getPage(finalSlug);
+        const existingHash = existingPage?.frontmatter._contentHash as string | undefined;
+
+        if (existingHash === hash) {
+          if (!jsonOut) {
+            header(`Put: ${finalSlug}`);
+            success(`Content unchanged — skipped (hash: ${hash})`);
+          }
+          print(program, {
+            ok: true,
+            action: "put",
+            slug: finalSlug,
+            unchanged: true,
+            contentHash: hash,
+          });
+          return;
+        }
+
         if (!jsonOut) {
           header(`Put: ${finalSlug}`);
+          if (existingPage) {
+            keyValue("Previous hash", existingHash ?? "none");
+            keyValue("New hash", hash);
+          }
           spinner.start(`Creating/updating page...`);
         }
-        
+
         const page = await repo.putPage({
           slug: finalSlug,
           type,
@@ -325,27 +549,32 @@ Examples:
           timeline: parsed.timeline,
           frontmatter: parsed.frontmatter,
         });
-        
+
         if (!jsonOut) {
           spinner.succeed(`Page saved: ${page.slug}`);
           keyValue("Title", title);
           keyValue("Type", type);
           keyValue("Content length", `${parsed.compiledTruth.length} chars`);
         }
-        
+
         await applyEntityLinks(
           repo,
           finalSlug,
           parsed.compiledTruth,
           jsonOut,
         );
-        
+
         if (!jsonOut) {
           const duration = formatDuration(Date.now() - startTime);
           success(`Operation completed in ${duration}`);
         }
-        
-        print(program, { ok: true, slug: page.slug, updatedAt: page.updatedAt });
+
+        print(program, {
+          ok: true,
+          slug: page.slug,
+          updatedAt: page.updatedAt,
+          contentHash: hash,
+        });
       });
     },
   );
@@ -416,18 +645,18 @@ Examples:
     await withRepo(program, async (repo) => {
       const jsonOut = isJson(program);
       const spinner = createSpinner();
-      
+
       if (!jsonOut) {
         header(`Delete: ${slug}`);
         spinner.start(`Deleting page and related data...`);
       }
-      
+
       await repo.deletePage(slug);
-      
+
       if (!jsonOut) {
         spinner.succeed(`Page deleted: ${slug}`);
       }
-      
+
       print(program, { ok: true, action: "delete", slug });
     });
   });
@@ -523,7 +752,7 @@ Examples:
       await withRepo(program, async (repo) => {
         const limit = Number(opts.limit ?? 10);
         const hits = await repo.query(question, limit);
-        
+
         // If --llm flag, generate answer based on multi-layer context
         if (opts.llm) {
           const settings = await loadSettings();
@@ -531,20 +760,20 @@ Examples:
             print(program, { error: "LLM not configured. Set llm.baseURL in settings." });
             return;
           }
-          
+
           const progress = createProgress();
           progress.start("Searching knowledge base...");
-          
+
           const contextLimit = Number(opts.contextLimit ?? 5);
           const topHits = hits.slice(0, contextLimit);
-          
+
           if (topHits.length === 0) {
             progress.stop();
             process.stderr.write("No relevant pages found.\n");
             print(program, { answer: "No relevant information found in the knowledge base.", sources: [] });
             return;
           }
-          
+
           // Collect multi-layer context (primary + raw data + linked pages scored by relevance)
           // ~100KB char budget ≈ 25K tokens, safe for most models
           const MAX_CONTEXT_CHARS = 100_000;
@@ -554,33 +783,33 @@ Examples:
             progress.update(`Loading ${stage}...`);
           });
           const ctxDuration = formatDuration(Date.now() - ctxStart);
-          
+
           if (sections.length === 0) {
             progress.stop();
             process.stderr.write("No content could be loaded.\n");
             print(program, { answer: "Failed to load page content.", sources: [] });
             return;
           }
-          
+
           progress.succeed(`Loaded ${stats.primaryPages} page(s), ${stats.rawDocs} raw doc(s), ${stats.linkedPages} linked page(s) (${ctxDuration})`);
           const startTime = Date.now();
-          
+
           const { answer, ok } = await generateAnswerWithStream(question, sections, stats, settings.llm);
-          
+
           if (!ok) {
             // If streaming failed, answer contains the error message
             console.log(answer);
             return;
           }
-          
+
           const duration = formatDuration(Date.now() - startTime);
-          
+
           // Show sources breakdown
           console.log("\n---\n**Sources:**\n");
           for (let i = 0; i < sections.length; i++) {
             const s = sections[i];
             const icon = s.type === 'primary' ? '📄' : s.type === 'raw_data' ? '📎' : '🔗';
-            console.log(`${icon} ${i + 1}. [[${s.slug}|${s.title}]] — ${s.label} (${(s.content.length / 1024).toFixed(1)}KB)`);
+            console.log(`${icon} ${i + 1}. [[${s.slug}|${s.title}]] - ${s.label} (${(s.content.length / 1024).toFixed(1)}KB)`);
           }
           console.log(`\n*Context: ${stats.primaryPages} page(s), ${stats.rawDocs} raw doc(s), ${stats.linkedPages} linked page(s)*`);
         } else {
@@ -764,11 +993,11 @@ Examples:
         throw new Error(`page not found: ${slug}`);
       }
       const settings = await loadSettings();
-      
+
       const progress = createProgress();
       progress.start(`Extracting timeline from ${slug}...`);
       const startTime = Date.now();
-      
+
       const result = await repo.extractAndAddTimeline(
         slug,
         page.compiledTruth,
@@ -776,16 +1005,16 @@ Examples:
         opts.defaultDate ?? new Date().toISOString().slice(0, 10),
         settings.llm,
       );
-      
+
       const duration = formatDuration(Date.now() - startTime);
-      
+
       if (result.entries.length > 0) {
         progress.succeed(`${result.entries.length} events extracted (${duration})`);
       } else {
         progress.stop();
         process.stderr.write(`No events found (${duration})\n`);
       }
-      
+
       print(program, {
         ok: true,
         action: "timeline-extract",
@@ -948,7 +1177,7 @@ Examples:
         data = JSON.parse(opts.data);
       } else if (opts.stdin) {
         const raw = await readMaybeStdin();
-        if (!raw?.trim()) throw new Error("empty stdin — pipe JSON");
+        if (!raw?.trim()) throw new Error("empty stdin - pipe JSON");
         data = JSON.parse(raw);
       } else {
         throw new Error("provide --data <json> or --stdin");
@@ -997,7 +1226,7 @@ Examples:
     await withRepo(program, async (repo) => {
       const root = resolve(dir);
       const files = await collectMarkdownFiles(root);
-      
+
       if (isDryRun(opts)) {
         print(program, {
           dryRun: true,
@@ -1013,16 +1242,16 @@ Examples:
       const settings = await loadSettings();
       const spinner = createSpinner();
       const startTime = Date.now();
-      
+
       if (!jsonOut) {
         header(`Import: ${root}`);
       }
-      
+
       // Phase 1: Parse all files and collect data
       if (!jsonOut) {
         spinner.start(`Scanning ${files.length} files...`);
       }
-      
+
       const fileData: Array<{
         file: string;
         slug: string;
@@ -1032,7 +1261,7 @@ Examples:
         timelineEntries: ReturnType<typeof extractTimelineLines>;
         tags: string[];
       }> = [];
-      
+
       for (const file of files) {
         const rawSlug = pathToSlug(file, root);
         const slug = normalizeLongSlug(rawSlug);
@@ -1045,19 +1274,19 @@ Examples:
           : [];
         fileData.push({ file, slug, parsed, content, wikiLinks, timelineEntries, tags });
       }
-      
+
       if (!jsonOut) {
         spinner.succeed(`Found ${files.length} markdown files`);
       }
-      
+
       // Phase 2: Write all pages first (skip embed for performance)
       if (!jsonOut) {
         spinner.start(`Writing ${fileData.length} pages to database...`);
       }
-      
+
       const allSlugs: string[] = [];
       const writeErrors: string[] = [];
-      
+
       for (let i = 0; i < fileData.length; i++) {
         const { slug, parsed } = fileData[i]!;
         if (!jsonOut && i % 20 === 0) {
@@ -1077,7 +1306,7 @@ Examples:
           writeErrors.push(`${slug}: ${err instanceof Error ? err.message : String(err)}`);
         }
       }
-      
+
       if (!jsonOut) {
         spinner.succeed(`Wrote ${allSlugs.length} pages to database`);
         if (writeErrors.length > 0) {
@@ -1090,16 +1319,16 @@ Examples:
           }
         }
       }
-      
+
       // Phase 3: Parallel entity extraction (main optimization)
       const BATCH_SIZE = 10;
       const entityResults = new Map<string, Awaited<ReturnType<typeof extractRelations>>>();
-      
+
       if (settings.llm.baseURL) {
         if (!jsonOut) {
           spinner.start(`Extracting entities with LLM...`);
         }
-        
+
         for (let i = 0; i < fileData.length; i += BATCH_SIZE) {
           const batch = fileData.slice(i, i + BATCH_SIZE);
           if (!jsonOut) {
@@ -1114,7 +1343,7 @@ Examples:
             entityResults.set(slug, relations);
           }
         }
-        
+
         if (!jsonOut) {
           spinner.succeed(`Entity extraction complete`);
         }
@@ -1123,17 +1352,17 @@ Examples:
           warning(`LLM not configured, skipping entity extraction`);
         }
       }
-      
+
       // Phase 4: Write links, tags, timeline, and entity pages
       if (!jsonOut) {
         spinner.start(`Creating links, tags, and timeline entries...`);
       }
-      
+
       let linkCount = 0;
       let timelineCount = 0;
       let entityCount = 0;
       let tagCount = 0;
-      
+
       // Collect timeline entries for batch insert
       const allTimelineEntries: Array<{
         pageSlug: string;
@@ -1142,14 +1371,14 @@ Examples:
         summary: string;
         detail: string;
       }> = [];
-      
+
       for (const { slug, wikiLinks, timelineEntries, tags, content } of fileData) {
         // Wiki links
         for (const link of wikiLinks) {
           await repo.link(slug, link, "import");
           linkCount++;
         }
-        
+
         // Collect timeline entries for batch insert
         for (const entry of timelineEntries) {
           allTimelineEntries.push({
@@ -1161,13 +1390,13 @@ Examples:
           });
           timelineCount++;
         }
-        
+
         // Tags
         for (const tag of tags) {
           await repo.tag(slug, tag);
           tagCount++;
         }
-        
+
         // Entity links from parallel extraction
         const relations = entityResults.get(slug);
         if (relations && relations.length > 0) {
@@ -1177,12 +1406,12 @@ Examples:
             const toCandidate = entityToSlug(r.to.name, r.to.type);
             const fromSlug = await repo.findSimilarSlug(fromCandidate, r.from.name);
             const toSlug = await repo.findSimilarSlug(toCandidate, r.to.name);
-            
+
             const c1 = await repo.ensureEntityPage(fromSlug, r.from.type, r.from.name, r.relation, r.context, slug);
             const c2 = await repo.ensureEntityPage(toSlug, r.to.type, r.to.name, r.relation, r.context, slug);
             if (c1) entityCount++;
             if (c2) entityCount++;
-            
+
             await repo.link(fromSlug, toSlug, `[${r.relation}] ${r.context}`);
             await repo.link(slug, fromSlug, `Mentions ${r.from.name}`);
             await repo.link(slug, toSlug, `Mentions ${r.to.name}`);
@@ -1190,16 +1419,16 @@ Examples:
           }
         }
       }
-      
+
       // Batch insert all timeline entries
       if (allTimelineEntries.length > 0) {
         await repo.timelineAddBatch(allTimelineEntries);
       }
-      
+
       if (!jsonOut) {
         spinner.succeed(`Created links, tags, and timeline`);
       }
-      
+
       // Phase 5: Batch sync all pages to search index
       if (opts.skipIndex) {
         if (!jsonOut) {
@@ -1210,14 +1439,14 @@ Examples:
           spinner.start(`Indexing ${allSlugs.length} pages for search...`);
         }
         await repo.embedAll();
-        
+
         if (!jsonOut) {
           spinner.succeed(`Search indexing complete`);
         }
       }
-      
+
       const duration = formatDuration(Date.now() - startTime);
-      
+
       if (!jsonOut) {
         // Print summary
         header("Import Summary");
@@ -1228,12 +1457,12 @@ Examples:
         keyValue("Timeline entries", String(timelineCount));
         keyValue("Tags added", String(tagCount));
         keyValue("Duration", duration);
-        
+
         if (writeErrors.length > 0) {
           warning(`${writeErrors.length} pages had errors`);
         }
       }
-      
+
       print(program, {
         ok: true,
         importedFiles: files.length,
@@ -1281,194 +1510,6 @@ Examples:
       });
     });
 
-  // -- ingest ---------------------------------------------------------------
-
-  addDryRun(
-    program
-      .command("ingest")
-      .argument("[source]", "file path or http(s) URL to ingest (omit for stdin)")
-      .option("--type <type>", "source type override")
-      .option("--stdin", "read raw text from stdin", false)
-      .option("--slug <slug>", "explicit slug (default: ingest/<name>)")
-      .option("--format <kind>", "force document kind (pdf|docx|html|json|markdown|text)")
-      .option("--max-bytes <number>", "max bytes accepted from URL/file", "52428800")
-      .option("--timeout <ms>", "fetch timeout for URLs in ms", "30000")
-      .description(
-        "ingest a document as a new page (supports PDF, Word .docx, HTML, plain text, and http(s) URLs)",
-      )
-      .addHelpText(
-        "after",
-        `
-Examples:
-  ebrain ingest report.pdf
-  ebrain ingest paper.docx
-  ebrain ingest https://example.com/whitepaper.pdf
-  ebrain ingest https://example.com/article --format html
-  cat article.md | ebrain ingest --stdin --type article
-  ebrain ingest report.pdf --slug docs/report-2024 --dry-run
-`,
-      ),
-  ).action(
-    async (
-      source: string | undefined,
-      opts: {
-        type?: string;
-        stdin?: boolean;
-        slug?: string;
-        format?: string;
-        maxBytes?: string;
-        timeout?: string;
-        dryRun?: boolean;
-      },
-    ) => {
-      let content: string;
-      let fileName: string;
-      let kind: DocumentKind;
-      let sourceRef: string;
-      let sourceType: "url" | "file" | "stdin";
-      let mimeType: string | undefined;
-      let bytes = 0;
-      let metadata: Record<string, unknown> = {};
-
-      if (source) {
-        const loaded = await loadDocument(source, {
-          forceKind: opts.format as DocumentKind | undefined,
-          fetchTimeoutMs: opts.timeout ? Number(opts.timeout) : undefined,
-          maxBytes: opts.maxBytes ? Number(opts.maxBytes) : undefined,
-        });
-        content = loaded.text;
-        fileName = loaded.fileName;
-        kind = loaded.kind;
-        sourceRef = loaded.source;
-        sourceType = loaded.sourceType;
-        mimeType = loaded.mimeType;
-        bytes = loaded.bytes;
-        metadata = loaded.metadata;
-      } else if (opts.stdin) {
-        const raw = await readMaybeStdin();
-        if (!raw?.trim()) throw new Error("empty stdin — pipe content");
-        content = raw;
-        fileName = "stdin";
-        kind = (opts.format as DocumentKind | undefined) ?? "text";
-        sourceRef = "stdin";
-        sourceType = "stdin";
-        bytes = Buffer.byteLength(raw, "utf8");
-        metadata = { parser: "stdin" };
-      } else {
-        throw new Error("provide <source> (file path or URL) or --stdin");
-      }
-
-      const slugBase = fileName
-        .replace(/\.[^.]+$/, "")
-        .toLowerCase()
-        .replace(/[^a-z0-9\u4e00-\u9fff]+/g, "-")
-        .replace(/^-+|-+$/g, "")
-        .slice(0, 80) || "document";
-      const slug = opts.slug ?? `ingest/${slugBase}`;
-      const type = opts.type ?? kind;
-
-      if (isDryRun(opts)) {
-        print(program, {
-          dryRun: true,
-          action: "ingest",
-          slug,
-          type,
-          kind,
-          sourceType,
-          sourceRef,
-          mimeType,
-          bytes,
-          contentLength: content.length,
-          metadata,
-        });
-        return;
-      }
-
-      await withRepo(program, async (repo) => {
-        const jsonOut = isJson(program);
-        const spinner = createSpinner();
-        const startTime = Date.now();
-
-        if (!jsonOut) {
-          header(`Ingest: ${fileName}`);
-          keyValue("Kind", kind);
-          keyValue("Source", sourceRef);
-          if (mimeType) keyValue("Content-Type", mimeType);
-          keyValue("Bytes", String(bytes));
-          spinner.start(`Creating page from ${kind}...`);
-        }
-
-        await repo.putPage({
-          slug,
-          type,
-          title: slugToTitle(slug),
-          compiledTruth: content,
-          timeline: "",
-          frontmatter: {
-            sourceFile: sourceRef,
-            sourceType,
-            sourceKind: kind,
-            sourceMimeType: mimeType,
-            sourceBytes: bytes,
-            sourceFileName: fileName,
-            ...metadata,
-          },
-        });
-
-        if (!jsonOut) {
-          spinner.succeed(`Page created: ${slug}`);
-          keyValue("Type", type);
-          keyValue("Content length", `${content.length} chars`);
-        }
-
-        await repo.timelineAdd({
-          pageSlug: slug,
-          date: new Date().toISOString().slice(0, 10),
-          source: type,
-          summary: `Ingested ${kind} ${fileName}`,
-          detail: sourceType === "url" ? `Source URL: ${sourceRef}` : "",
-        });
-
-        // Persist a structured raw_data record so the original source is traceable.
-        try {
-          await repo.writeRaw(slug, sourceType, {
-            fileName,
-            sourceRef,
-            kind,
-            mimeType,
-            bytes,
-            metadata,
-            ingestedAt: new Date().toISOString(),
-          });
-        } catch (err) {
-          if (!jsonOut) {
-            warning(
-              `failed to record raw_data: ${err instanceof Error ? err.message : String(err)}`,
-            );
-          }
-        }
-
-        await applyEntityLinks(repo, slug, content, jsonOut);
-
-        if (!jsonOut) {
-          const duration = formatDuration(Date.now() - startTime);
-          success(`Ingestion completed in ${duration}`);
-        }
-
-        print(program, {
-          ok: true,
-          action: "ingest",
-          slug,
-          kind,
-          sourceType,
-          sourceRef,
-          bytes,
-          contentLength: content.length,
-        });
-      });
-    },
-  );
-
   // -- embed ----------------------------------------------------------------
 
   addDryRun(
@@ -1508,26 +1549,26 @@ Examples:
           const jsonOut = isJson(program);
           const spinner = createSpinner();
           const startTime = Date.now();
-          
+
           if (!jsonOut) {
             header("Embed All Pages");
             spinner.start(`Loading pages...`);
           }
-          
+
           const pages = await repo.listPages({ limit: 100000 });
-          
+
           if (!jsonOut) {
             spinner.update(`Embedding ${pages.length} pages...`);
           }
-          
+
           const count = await repo.embedAll();
-          
+
           if (!jsonOut) {
             const duration = formatDuration(Date.now() - startTime);
             spinner.succeed(`Embedded ${count} pages`);
             keyValue("Duration", duration);
           }
-          
+
           print(program, { embedded: count, mode: "all" });
         });
         return;
@@ -1542,18 +1583,18 @@ Examples:
       await withRepo(program, async (repo) => {
         const jsonOut = isJson(program);
         const spinner = createSpinner();
-        
+
         if (!jsonOut) {
           header(`Embed: ${slug}`);
           spinner.start(`Generating embedding for page...`);
         }
-        
+
         await repo.syncPageToSearch(slug);
-        
+
         if (!jsonOut) {
           spinner.succeed(`Page embedded: ${slug}`);
         }
-        
+
         print(program, { embedded: 1, slug });
       });
     },
@@ -1606,7 +1647,7 @@ Examples:
         }
         dbInitialized = true;
       } else {
-        // Try to create it without collection — embedding config may not be ready
+        // Try to create it without collection - embedding config may not be ready
         try {
           const db = await BrainDb.connect(dbPath, settings, { skipCollection: true });
           await db.close();
@@ -1680,7 +1721,7 @@ Examples:
       await withRepo(program, async (repo) => {
         const jsonOut = isJson(program);
         const stats = await repo.stats();
-        
+
         if (!jsonOut) {
           header("Knowledge Base Statistics");
           keyValue("Pages", String(stats.pages));
@@ -1689,7 +1730,7 @@ Examples:
           keyValue("Timeline entries", String(stats.timelineEntries));
           keyValue("Raw data rows", String(stats.rawRows));
         }
-        
+
         print(program, stats);
       });
     });
@@ -1750,7 +1791,7 @@ async function withRepo(
   const db = await BrainDb.connect(dbPath, settings);
   const repo = new BrainRepository(db);
   await callback(repo);
-  
+
   // Gracefully close database
   // Note: seekdb SDK's InternalEmbeddedClient.close() is empty in embedded mode
   // Data may not flush properly. Use remote seekdb server for reliability.
@@ -1759,10 +1800,10 @@ async function withRepo(
   } catch (e) {
     // Close may fail due to seekdb native bug
   }
-  
+
   // Give seekdb extra time after close
   await new Promise((r) => setTimeout(r, 500));
-  
+
   // CLI: force exit to bypass seekdb native cleanup segfault
   process.exit(0);
 }
@@ -1805,7 +1846,7 @@ function normalizeLinkSlug(path: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// LLM Answer Generation — Multi-layer Context Collection
+// LLM Answer Generation - Multi-layer Context Collection
 // ---------------------------------------------------------------------------
 
 /** A single section of context for the LLM prompt. */
@@ -1820,12 +1861,12 @@ interface ContextSection {
 
 /**
  * Collect multi-layer context for LLM answer generation.
- * 
+ *
  * Layers (in priority order):
  * 1. Primary: compiledTruth + timeline of each hit page
  * 2. Raw data: original documents stored via raw.set
  * 3. Linked pages: compiledTruth of pages linked to/from hit pages
- * 
+ *
  * Budget is enforced via total character limit.
  */
 async function collectContextForLLM(
@@ -1924,8 +1965,8 @@ async function collectContextForLLM(
     }
   }
 
-  // Layer 3: Linked pages — score using cached data + keyword matching
-  // No second repo.query() call needed — reuse hits scores + keyword fallback
+  // Layer 3: Linked pages - score using cached data + keyword matching
+  // No second repo.query() call needed - reuse hits scores + keyword fallback
   onProgress?.('linked pages');
   const allLinkedSlugs = new Set<string>();
   for (const hit of hits) {
@@ -2031,7 +2072,7 @@ async function collectContextForLLM(
 function computeKeywordRelevance(text: string, question: string): number {
   const STOP_CHARS = new Set('的是了在和我有你就这不人都说上个大国为到以们年会生地要主中子自实家小对多能好可很所把当');
   const questionChars = [...question]
-    .filter(c => !/\s|[,，。！？、；:：""''（）()【】\[\]{}<>\/\\|~`@#$%^&*+=_-]/.test(c) && !STOP_CHARS.has(c));
+    .filter(c => !/\s|[,,。!?、;::""''()()【】\[\]{}<>\/\\|~`@#$%^&*+=_-]/.test(c) && !STOP_CHARS.has(c));
   if (questionChars.length === 0) return 0;
 
   const uniqueChars = new Set(questionChars);
@@ -2082,7 +2123,7 @@ async function generateAnswerWithStream(
     contextParts.push(`## ${header}\n`);
     for (const s of group) {
       sectionIndex++;
-      contextParts.push(`### [${sectionIndex}] ${s.title} — ${s.label}\n**Slug:** ${s.slug}\n\n${s.content}\n`);
+      contextParts.push(`### [${sectionIndex}] ${s.title} - ${s.label}\n**Slug:** ${s.slug}\n\n${s.content}\n`);
     }
     contextParts.push('');
   }
@@ -2093,7 +2134,7 @@ async function generateAnswerWithStream(
 
   const context = contextParts.join('\n');
 
-  const prompt = `你是一个知识库助手，请根据提供的知识库内容回答问题。
+  const prompt = `你是一个知识库助手,请根据提供的知识库内容回答问题。
 
 ## 问题
 ${question}
@@ -2103,13 +2144,13 @@ ${question}
 ${context}
 
 ## 回答要求
-- 仅基于提供的知识库内容回答，不要编造信息
-- 如果知识库中没有相关信息，请明确说明
+- 仅基于提供的知识库内容回答,不要编造信息
+- 如果知识库中没有相关信息,请明确说明
 - 引用来源时使用 [[slug|标题]] 的格式
 - 使用清晰的 markdown 格式
-- 如果涉及时间线信息，请在回答中体现
+- 如果涉及时间线信息,请在回答中体现
 - 区分哪些信息来自「页面正文」、哪些来自「原始文档」、哪些来自「关联页面」
-- 语言与提问保持一致（中文提问用中文回答，英文提问用英文回答）
+- 语言与提问保持一致(中文提问用中文回答,英文提问用英文回答)
 
 ## 回答`;
 
@@ -2124,10 +2165,10 @@ ${context}
 
   try {
     const url = llm.baseURL.endsWith("/") ? llm.baseURL + "chat/completions" : llm.baseURL + "/chat/completions";
-    
+
     // Show thinking indicator while waiting for first token
     process.stderr.write(`\x1b[35m💭\x1b[0m \x1b[2mConnecting to ${llm.model}...\x1b[0m\n`);
-    
+
     const resp = await fetch(
       url,
       {
@@ -2142,7 +2183,7 @@ ${context}
           messages: [
             {
               role: "system",
-              content: "你是一个专业的知识库助手，基于提供的知识库内容准确回答问题。引用来源时使用 [[slug|标题]] 格式。回答要条理清晰，区分信息来源。",
+              content: "你是一个专业的知识库助手,基于提供的知识库内容准确回答问题。引用来源时使用 [[slug|标题]] 格式。回答要条理清晰,区分信息来源。",
             },
             { role: "user", content: prompt },
           ],
@@ -2251,7 +2292,7 @@ async function generateAnswerWithContext(
     contextParts.push(`## ${header}\n`);
     for (const s of group) {
       sectionIndex++;
-      contextParts.push(`### [${sectionIndex}] ${s.title} — ${s.label}\n**Slug:** ${s.slug}\n\n${s.content}\n`);
+      contextParts.push(`### [${sectionIndex}] ${s.title} - ${s.label}\n**Slug:** ${s.slug}\n\n${s.content}\n`);
     }
     contextParts.push('');
   }
@@ -2262,7 +2303,7 @@ async function generateAnswerWithContext(
 
   const context = contextParts.join('\n');
 
-  const prompt = `你是一个知识库助手，请根据提供的知识库内容回答问题。
+  const prompt = `你是一个知识库助手,请根据提供的知识库内容回答问题。
 
 ## 问题
 ${question}
@@ -2272,13 +2313,13 @@ ${question}
 ${context}
 
 ## 回答要求
-- 仅基于提供的知识库内容回答，不要编造信息
-- 如果知识库中没有相关信息，请明确说明
+- 仅基于提供的知识库内容回答,不要编造信息
+- 如果知识库中没有相关信息,请明确说明
 - 引用来源时使用 [[slug|标题]] 的格式
 - 使用清晰的 markdown 格式
-- 如果涉及时间线信息，请在回答中体现
+- 如果涉及时间线信息,请在回答中体现
 - 区分哪些信息来自「页面正文」、哪些来自「原始文档」、哪些来自「关联页面」
-- 语言与提问保持一致（中文提问用中文回答，英文提问用英文回答）
+- 语言与提问保持一致(中文提问用中文回答,英文提问用英文回答)
 
 ## 回答`;
 
@@ -2296,7 +2337,7 @@ ${context}
           messages: [
             {
               role: "system",
-              content: "你是一个专业的知识库助手，基于提供的知识库内容准确回答问题。引用来源时使用 [[slug|标题]] 格式。回答要条理清晰，区分信息来源。",
+              content: "你是一个专业的知识库助手,基于提供的知识库内容准确回答问题。引用来源时使用 [[slug|标题]] 格式。回答要条理清晰,区分信息来源。",
             },
             { role: "user", content: prompt },
           ],

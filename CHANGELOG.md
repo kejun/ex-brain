@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Content Hash Idempotency**: `ebrain put` now stores a SHA-256 content hash in `frontmatter._contentHash`. Re-importing identical content is detected instantly — the operation is skipped before any side-effect (timeline, raw_data, LLM entity extraction) runs. Updating changed content still works normally.
+
+### Changed
+
+- **`ebrain put` unified document handling**: `put --file` now auto-detects file type. Markdown files go through `parsePageMarkdown` as before; non-markdown files (PDF, DOCX, HTML, TXT, JSON) and http(s) URLs are routed through `loadDocument` for text extraction. The standalone `ebrain ingest` command has been **removed** — use `ebrain put --file <path>` instead.
+- **`put` new options**: `--format <kind>`, `--max-bytes <number>`, `--timeout <ms>` — needed when ingesting non-markdown files.
+
+### Breaking Changes
+
+- **`ebrain ingest` command removed**: All functionality merged into `ebrain put`. Existing MCP tool `brain_ingest_document` still works (routes to the same code path), but CLI users should switch to `ebrain put --file <path>`. Slug auto-generation for documents changed from `ingest/<slugify-with-ext>` to `ingest/<slugify-without-ext>`.
+
 ## [0.2.5] - 2026-04-14
 
 ### Changed

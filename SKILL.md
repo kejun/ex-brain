@@ -128,26 +128,28 @@ ebrain tag add <slug> <tag>         # idempotent
 ebrain tag remove <slug> <tag>
 ```
 
-### Document Ingestion (PDF / Word / URL)
+### Page Creation (put)
 
-`ebrain ingest` accepts local files **and** http(s) URLs and auto-extracts text from PDF, Word `.docx`, HTML, JSON, Markdown, and plain text. PDFs are parsed via `unpdf`, Word via `mammoth`, HTML is stripped to text. Source kind is detected from the file extension, HTTP `Content-Type`, or magic bytes.
+`ebrain put` accepts markdown files **and** auto-detects non-markdown documents (PDF, DOCX, HTML, TXT, JSON) and http(s) URLs. Markdown files go through `parsePageMarkdown` (preserving frontmatter, timelines, wiki links); non-markdown files go through `loadDocument` for text extraction. Re-importing identical content is detected via content hash — the operation is instantly skipped without side-effects.
 
 ```bash
-# Local PDF / Word
-ebrain ingest report.pdf
-ebrain ingest meeting-notes.docx
+# Markdown (parsed with frontmatter/timeline/wiki-links)
+ebrain put docs/api --file api.md
 
-# Remote document (auto-detected from Content-Type)
-ebrain ingest https://example.com/whitepaper.pdf
+# PDF / DOCX / HTML / TXT / JSON (auto text extraction)
+ebrain put --file report.pdf
+ebrain put docs/report --file report.pdf  # explicit slug
+ebrain put --file https://example.com/whitepaper.pdf
+ebrain put --file article.docx --format text  # force format
 
-# Remote HTML article (force the kind if the server lies about Content-Type)
-ebrain ingest https://example.com/article --format html
+# Pipe input
+ebrain put my/note --stdin < note.md
 
-# Custom slug + dry-run preview
-ebrain ingest report.pdf --slug docs/q4-report --dry-run
+# Dry-run preview
+ebrain put --file report.pdf --dry-run
 ```
 
-Each ingest writes the extracted text to `compiled_truth`, records a timeline event, stores source metadata in the page frontmatter (`sourceFile`, `sourceType`, `sourceKind`, `sourceMimeType`, `sourceBytes`, parser stats), and a structured row in `raw_data` for traceability. See `docs/document-ingestion.md` for the full reference.
+Each document ingest writes the extracted text to `compiled_truth`, records a timeline event, stores source metadata in the page frontmatter (`sourceFile`, `sourceType`, `sourceKind`, `sourceMimeType`, `sourceBytes`, parser stats, `_contentHash`), and a structured row in `raw_data` for traceability.
 
 ### Knowledge Graph Visualization
 
