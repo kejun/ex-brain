@@ -13,6 +13,7 @@ import {
   slugToPath,
   writeTextFile,
 } from "../markdown/io";
+import { loadDocument, isRemoteUrl, type DocumentKind } from "../markdown/document-loader";
 import {
   extractTimelineLines,
   extractWikiStyleLinks,
@@ -1285,45 +1286,86 @@ Examples:
   addDryRun(
     program
       .command("ingest")
-      .argument("[file]", "file path to ingest (omit for stdin)")
-      .option("--type <type>", "source type", "doc")
-      .option("--stdin", "read from stdin", false)
-      .description("ingest a file as a new page (under ingest/<name>)")
+      .argument("[source]", "file path or http(s) URL to ingest (omit for stdin)")
+      .option("--type <type>", "source type override")
+      .option("--stdin", "read raw text from stdin", false)
+      .option("--slug <slug>", "explicit slug (default: ingest/<name>)")
+      .option("--format <kind>", "force document kind (pdf|docx|html|json|markdown|text)")
+      .option("--max-bytes <number>", "max bytes accepted from URL/file", "52428800")
+      .option("--timeout <ms>", "fetch timeout for URLs in ms", "30000")
+      .description(
+        "ingest a document as a new page (supports PDF, Word .docx, HTML, plain text, and http(s) URLs)",
+      )
       .addHelpText(
         "after",
         `
 Examples:
-  ebrain ingest report.pdf --type pdf
+  ebrain ingest report.pdf
+  ebrain ingest paper.docx
+  ebrain ingest https://example.com/whitepaper.pdf
+  ebrain ingest https://example.com/article --format html
   cat article.md | ebrain ingest --stdin --type article
-  ebrain ingest report.pdf --type pdf --dry-run
+  ebrain ingest report.pdf --slug docs/report-2024 --dry-run
 `,
       ),
   ).action(
     async (
-      file: string | undefined,
-      opts: { type?: string; stdin?: boolean; dryRun?: boolean },
+      source: string | undefined,
+      opts: {
+        type?: string;
+        stdin?: boolean;
+        slug?: string;
+        format?: string;
+        maxBytes?: string;
+        timeout?: string;
+        dryRun?: boolean;
+      },
     ) => {
       let content: string;
       let fileName: string;
+      let kind: DocumentKind;
+      let sourceRef: string;
+      let sourceType: "url" | "file" | "stdin";
+      let mimeType: string | undefined;
+      let bytes = 0;
+      let metadata: Record<string, unknown> = {};
 
-      if (file) {
-        const fullPath = resolve(file);
-        if (!(await fileExists(fullPath))) {
-          throw new Error(`file not found: ${file}`);
-        }
-        content = await readTextFile(fullPath);
-        fileName = basename(fullPath);
+      if (source) {
+        const loaded = await loadDocument(source, {
+          forceKind: opts.format as DocumentKind | undefined,
+          fetchTimeoutMs: opts.timeout ? Number(opts.timeout) : undefined,
+          maxBytes: opts.maxBytes ? Number(opts.maxBytes) : undefined,
+        });
+        content = loaded.text;
+        fileName = loaded.fileName;
+        kind = loaded.kind;
+        sourceRef = loaded.source;
+        sourceType = loaded.sourceType;
+        mimeType = loaded.mimeType;
+        bytes = loaded.bytes;
+        metadata = loaded.metadata;
       } else if (opts.stdin) {
         const raw = await readMaybeStdin();
         if (!raw?.trim()) throw new Error("empty stdin — pipe content");
         content = raw;
         fileName = "stdin";
+        kind = (opts.format as DocumentKind | undefined) ?? "text";
+        sourceRef = "stdin";
+        sourceType = "stdin";
+        bytes = Buffer.byteLength(raw, "utf8");
+        metadata = { parser: "stdin" };
       } else {
-        throw new Error("provide <file> or --stdin");
+        throw new Error("provide <source> (file path or URL) or --stdin");
       }
 
-      const slug = `ingest/${fileName.replace(/\.[^.]+$/, "")}`;
-      const type = opts.type ?? "doc";
+      const slugBase = fileName
+        .replace(/\.[^.]+$/, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9\u4e00-\u9fff]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 80) || "document";
+      const slug = opts.slug ?? `ingest/${slugBase}`;
+      const type = opts.type ?? kind;
 
       if (isDryRun(opts)) {
         print(program, {
@@ -1331,7 +1373,13 @@ Examples:
           action: "ingest",
           slug,
           type,
+          kind,
+          sourceType,
+          sourceRef,
+          mimeType,
+          bytes,
           contentLength: content.length,
+          metadata,
         });
         return;
       }
@@ -1340,12 +1388,16 @@ Examples:
         const jsonOut = isJson(program);
         const spinner = createSpinner();
         const startTime = Date.now();
-        
+
         if (!jsonOut) {
           header(`Ingest: ${fileName}`);
-          spinner.start(`Creating page from file...`);
+          keyValue("Kind", kind);
+          keyValue("Source", sourceRef);
+          if (mimeType) keyValue("Content-Type", mimeType);
+          keyValue("Bytes", String(bytes));
+          spinner.start(`Creating page from ${kind}...`);
         }
-        
+
         await repo.putPage({
           slug,
           type,
@@ -1353,39 +1405,66 @@ Examples:
           compiledTruth: content,
           timeline: "",
           frontmatter: {
-            sourceFile: resolve(fileName),
-            sourceType: type,
+            sourceFile: sourceRef,
+            sourceType,
+            sourceKind: kind,
+            sourceMimeType: mimeType,
+            sourceBytes: bytes,
+            sourceFileName: fileName,
+            ...metadata,
           },
         });
-        
+
         if (!jsonOut) {
           spinner.succeed(`Page created: ${slug}`);
-          keyValue("Source file", fileName);
           keyValue("Type", type);
           keyValue("Content length", `${content.length} chars`);
         }
-        
+
         await repo.timelineAdd({
           pageSlug: slug,
           date: new Date().toISOString().slice(0, 10),
           source: type,
-          summary: `Ingested file ${fileName}`,
-          detail: "",
+          summary: `Ingested ${kind} ${fileName}`,
+          detail: sourceType === "url" ? `Source URL: ${sourceRef}` : "",
         });
-        
-        await applyEntityLinks(
-          repo,
-          slug,
-          content,
-          jsonOut,
-        );
-        
+
+        // Persist a structured raw_data record so the original source is traceable.
+        try {
+          await repo.writeRaw(slug, sourceType, {
+            fileName,
+            sourceRef,
+            kind,
+            mimeType,
+            bytes,
+            metadata,
+            ingestedAt: new Date().toISOString(),
+          });
+        } catch (err) {
+          if (!jsonOut) {
+            warning(
+              `failed to record raw_data: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+        }
+
+        await applyEntityLinks(repo, slug, content, jsonOut);
+
         if (!jsonOut) {
           const duration = formatDuration(Date.now() - startTime);
           success(`Ingestion completed in ${duration}`);
         }
-        
-        print(program, { ok: true, action: "ingest", slug });
+
+        print(program, {
+          ok: true,
+          action: "ingest",
+          slug,
+          kind,
+          sourceType,
+          sourceRef,
+          bytes,
+          contentLength: content.length,
+        });
       });
     },
   );
