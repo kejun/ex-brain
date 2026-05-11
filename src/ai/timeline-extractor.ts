@@ -1,14 +1,15 @@
 /**
- * Timeline Extraction — Ax Signature version.
+ * Timeline Extraction — AIPipeline version.
  *
- * Uses f.json() for complex output instead of f.object().array()
- * because Ax's tool calling response parsing has compatibility issues
- * with DashScope/qwen models.
+ * Uses AIPipeline for LLM call lifecycle (createAxAI → forward → parse → transform → fallback).
+ *
+ * Public API unchanged — drop-in replacement for callers.
  */
 
-import { ax, f } from "@ax-llm/ax";
+import { f } from "@ax-llm/ax";
 import type { ResolvedLLM } from "../settings";
 import type { TimelineEntry } from "../types";
+import { AIPipeline, parseJsonArray } from "./ax-pipeline";
 import { createAxAI } from "./ax-adapter";
 
 // ---------------------------------------------------------------------------
@@ -29,7 +30,7 @@ export interface TimelineExtractionResult {
 }
 
 // ---------------------------------------------------------------------------
-// Signature definition (using json type for complex output)
+// Timeline pipeline configuration
 // ---------------------------------------------------------------------------
 
 const timelineSig = f()
@@ -39,99 +40,6 @@ const timelineSig = f()
     "Array of events. Each: { date (YYYY-MM-DD), summary (max 120 chars, Chinese), detail (optional, Chinese), eventType (milestone|update|meeting|announcement|transaction|other), importance (1-5) }"
   ))
   .build();
-
-const timelineGen = ax(timelineSig);
-
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
-export async function extractTimelineEvents(
-  input: TimelineExtractionInput,
-  llm: ResolvedLLM,
-): Promise<TimelineExtractionResult> {
-  if (!input.content.trim()) {
-    return { entries: [], success: false, confidence: 0.3 };
-  }
-
-  const aiClient = createAxAI(llm);
-  if (!aiClient) {
-    return fallbackExtract(input);
-  }
-
-  try {
-    const result = await timelineGen.forward(aiClient, {
-      textContent: input.content.slice(0, 4000),
-      infoDate: input.defaultDate,
-    });
-
-    const rawEvents = parseEvents(result.events);
-    const entries: TimelineEntry[] = [];
-    for (const e of rawEvents) {
-      const date = normalizeDate(String(e.date ?? ""), input.defaultDate);
-      if (!date) continue;
-
-      entries.push({
-        pageSlug: input.pageSlug,
-        date,
-        source: input.source,
-        summary: String(e.summary ?? "").slice(0, 120),
-        detail: String(e.detail ?? ""),
-        importance: Math.max(1, Math.min(5, Math.round(Number(e.importance ?? 3)))),
-      });
-    }
-
-    entries.sort((a, b) => b.date.localeCompare(a.date));
-
-    return {
-      entries: entries.slice(0, 5),
-      success: entries.length > 0,
-      confidence: entries.length > 0 ? 0.85 : 0.3,
-    };
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    console.warn(`[ebrain] Timeline extraction failed: ${msg}`);
-    return fallbackExtract(input);
-  }
-}
-
-export async function extractTimelineFromRelation(
-  relation: { from: string; to: string; relationType: string; context: string },
-  defaultDate: string,
-  pageSlug: string,
-  llm: ResolvedLLM,
-): Promise<TimelineEntry | null> {
-  const significantTypes = ["invested_in", "acquired", "founder_of", "leader_of", "works_at"];
-  if (!significantTypes.includes(relation.relationType)) return null;
-
-  const aiClient = createAxAI(llm);
-  if (!aiClient) return null;
-
-  try {
-    const content = `${relation.from} → ${relation.to} (${relation.relationType}): ${relation.context}`;
-    const result = await timelineGen.forward(aiClient, {
-      textContent: content,
-      infoDate: defaultDate,
-    });
-
-    const rawEvents = parseEvents(result.events);
-    for (const e of rawEvents) {
-      const date = normalizeDate(String(e.date ?? ""), defaultDate);
-      if (!date) continue;
-      return {
-        pageSlug,
-        date,
-        source: "extracted",
-        summary: String(e.summary ?? "").slice(0, 120),
-        detail: String(e.detail ?? ""),
-        importance: Math.max(1, Math.min(5, Math.round(Number(e.importance ?? 3)))),
-      };
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
 
 interface RawEvent {
   date?: string;
@@ -157,6 +65,20 @@ function parseEvents(raw: unknown): RawEvent[] {
   }
   return [];
 }
+
+const timelinePipeline = new AIPipeline<
+  { textContent: string; infoDate: string },
+  RawEvent[],
+  RawEvent[]
+>({
+  signature: timelineSig,
+  mapInput: (input) => input,
+  extractOutput: (raw) => raw.events,
+  parseRaw: parseEvents,
+  transform: (raw) => raw,
+  fallback: () => [],
+  label: "Timeline extraction",
+});
 
 // ---------------------------------------------------------------------------
 // Date Normalization (preserved from original implementation)
@@ -243,4 +165,93 @@ function fallbackExtract(input: TimelineExtractionInput): TimelineExtractionResu
   }
   const uniqueEntries = Array.from(seen.values());
   return { entries: uniqueEntries, success: uniqueEntries.length > 0, confidence: 0.4 };
+}
+
+// ---------------------------------------------------------------------------
+// Public API (unchanged)
+// ---------------------------------------------------------------------------
+
+export async function extractTimelineEvents(
+  input: TimelineExtractionInput,
+  llm: ResolvedLLM,
+): Promise<TimelineExtractionResult> {
+  if (!input.content.trim()) {
+    return { entries: [], success: false, confidence: 0.3 };
+  }
+
+  const aiClient = createAxAI(llm);
+  if (!aiClient) {
+    return fallbackExtract(input);
+  }
+
+  try {
+    const rawEvents = await timelinePipeline.run(
+      { textContent: input.content.slice(0, 4000), infoDate: input.defaultDate },
+      llm,
+    );
+
+    const entries: TimelineEntry[] = [];
+    for (const e of rawEvents) {
+      const date = normalizeDate(String(e.date ?? ""), input.defaultDate);
+      if (!date) continue;
+
+      entries.push({
+        pageSlug: input.pageSlug,
+        date,
+        source: input.source,
+        summary: String(e.summary ?? "").slice(0, 120),
+        detail: String(e.detail ?? ""),
+        importance: Math.max(1, Math.min(5, Math.round(Number(e.importance ?? 3)))),
+      });
+    }
+
+    entries.sort((a, b) => b.date.localeCompare(a.date));
+
+    return {
+      entries: entries.slice(0, 5),
+      success: entries.length > 0,
+      confidence: entries.length > 0 ? 0.85 : 0.3,
+    };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.warn(`[ebrain] Timeline extraction failed: ${msg}`);
+    return fallbackExtract(input);
+  }
+}
+
+export async function extractTimelineFromRelation(
+  relation: { from: string; to: string; relationType: string; context: string },
+  defaultDate: string,
+  pageSlug: string,
+  llm: ResolvedLLM,
+): Promise<TimelineEntry | null> {
+  const significantTypes = ["invested_in", "acquired", "founder_of", "leader_of", "works_at"];
+  if (!significantTypes.includes(relation.relationType)) return null;
+
+  const aiClient = createAxAI(llm);
+  if (!aiClient) return null;
+
+  try {
+    const content = `${relation.from} → ${relation.to} (${relation.relationType}): ${relation.context}`;
+    const rawEvents = await timelinePipeline.run(
+      { textContent: content, infoDate: defaultDate },
+      llm,
+    );
+
+    for (const e of rawEvents) {
+      const date = normalizeDate(String(e.date ?? ""), defaultDate);
+      if (!date) continue;
+      return {
+        pageSlug,
+        date,
+        source: "extracted",
+        summary: String(e.summary ?? "").slice(0, 120),
+        detail: String(e.detail ?? ""),
+        importance: Math.max(1, Math.min(5, Math.round(Number(e.importance ?? 3)))),
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }

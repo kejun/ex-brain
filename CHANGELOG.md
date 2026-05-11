@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **`ebrain put` unified document handling**: `put --file` now auto-detects file type. Markdown files go through `parsePageMarkdown` as before; non-markdown files (PDF, DOCX, HTML, TXT, JSON) and http(s) URLs are routed through `loadDocument` for text extraction. The standalone `ebrain ingest` command has been **removed** — use `ebrain put --file <path>` instead.
+- **`ebrain import` supports multiple paths**: Accepts directories (recursive), individual files (`.md`, `.pdf`, `.docx`), or any mix. Shell glob patterns like `ebrain import *.docx` work out of the box. The old single-directory form `ebrain import ./docs` still works as before.
 - **`put` new options**: `--format <kind>`, `--max-bytes <number>`, `--timeout <ms>` — needed when ingesting non-markdown files.
 
 ### Breaking Changes

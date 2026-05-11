@@ -1,20 +1,16 @@
 /**
- * Intelligent Compilation — Ax Signature version.
+ * Intelligent Compilation — AIPipeline version.
  *
- * Uses f.json() for complex multi-line output (compiledTruth contains markdown
- * with multiple lines, which breaks Ax's line-based field parsing).
+ * Uses AIPipeline for LLM call lifecycle (createAxAI → forward → parse → transform → fallback).
+ * Two pipeline instances: compileTruth + extractTimeline (both use AIPipeline).
  *
- * Features:
- * - Declaraive input/output contracts
- * - Automatic validation + retry on failure
- * - Ready for GEPA optimization
- * - Fallback to append when LLM unavailable
+ * Public API unchanged — drop-in replacement for callers.
  */
 
-import { ax, f } from "@ax-llm/ax";
+import { f } from "@ax-llm/ax";
 import type { ResolvedLLM } from "../settings";
 import type { TimelineEntry } from "../types";
-import { createAxAI } from "./ax-adapter";
+import { AIPipeline, parseJsonObject } from "./ax-pipeline";
 
 // ---------------------------------------------------------------------------
 // Types (preserved for API compatibility with BrainRepository)
@@ -39,7 +35,7 @@ export interface CompileResult {
 }
 
 // ---------------------------------------------------------------------------
-// Signature definition (using json for multi-line compiledTruth)
+// Compile pipeline configuration
 // ---------------------------------------------------------------------------
 
 const compileSig = f()
@@ -57,68 +53,6 @@ const compileSig = f()
   ))
   .build();
 
-const compileGen = ax(compileSig);
-
-// Timeline extraction sub-signature
-const timelineSig = f()
-  .input("newInfo", f.string("Information to extract timeline events from"))
-  .input("infoSource", f.string("Source identifier"))
-  .input("infoDate", f.string("Date of the information in YYYY-MM-DD format"))
-  .output("events", f.json(
-    "Array of timeline events with: date (YYYY-MM-DD), summary (max 120 chars), detail (optional)"
-  ))
-  .build();
-
-const timelineGen = ax(timelineSig);
-
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
-export async function compileTruth(
-  input: CompileInput,
-  llm: ResolvedLLM,
-): Promise<CompileResult> {
-  const aiClient = createAxAI(llm);
-  if (!aiClient) return fallbackAppend(input);
-
-  try {
-    // Step 1: Main compilation
-    const context = buildContext(input);
-    const result = await compileGen.forward(aiClient, {
-      currentTruth: input.currentTruth || "(empty)",
-      newInfo: input.newInfo,
-      infoSource: input.source,
-      infoDate: input.date,
-      context,
-    });
-
-    // Parse the JSON result
-    const compiled = parseCompileResult(result.compilationResult);
-    if (!compiled) return fallbackAppend(input);
-
-    // Step 2: Extract timeline entries
-    const timelineEntries = await extractTimeline(input, aiClient);
-
-    return {
-      compiledTruth: compiled.compiledTruth,
-      changed: compiled.changeType !== "none",
-      changeType: compiled.changeType,
-      changeSummary: compiled.changeSummary,
-      timelineEntries,
-      confidence: compiled.confidence,
-    };
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    console.warn(`[ebrain] Ax compilation failed, falling back to append: ${msg}`);
-    return fallbackAppend(input);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 interface ParsedCompileResult {
   changeType: CompileResult["changeType"];
   compiledTruth: string;
@@ -127,18 +61,14 @@ interface ParsedCompileResult {
 }
 
 function parseCompileResult(raw: unknown): ParsedCompileResult | null {
-  let obj: Record<string, unknown>;
-  if (typeof raw === "string") {
-    try { obj = JSON.parse(raw); } catch { return null; }
-  } else if (typeof raw === "object" && raw !== null) {
-    obj = raw as Record<string, unknown>;
-  } else {
-    return null;
-  }
+  const obj = parseJsonObject(raw);
+  if (!obj) return null;
 
   const changeType = String(obj.changeType ?? "none");
   const validTypes = ["append", "update", "replace", "none", "conflict"];
-  const normalizedType = validTypes.includes(changeType) ? changeType as CompileResult["changeType"] : "append";
+  const normalizedType = validTypes.includes(changeType)
+    ? changeType as CompileResult["changeType"]
+    : "append";
 
   const compiledTruth = String(obj.compiledTruth ?? "");
   if (!compiledTruth) return null;
@@ -151,6 +81,115 @@ function parseCompileResult(raw: unknown): ParsedCompileResult | null {
   };
 }
 
+const compilePipeline = new AIPipeline<CompileInput, ParsedCompileResult, {
+  parsed: ParsedCompileResult;
+  timelineEntries: TimelineEntry[];
+}>({
+  signature: compileSig,
+  mapInput: (input) => ({
+    currentTruth: input.currentTruth || "(empty)",
+    newInfo: input.newInfo,
+    infoSource: input.source,
+    infoDate: input.date,
+    context: buildContext(input),
+  }),
+  extractOutput: (raw) => raw.compilationResult,
+  parseRaw: parseCompileResult,
+  transform: (_parsed, _input) => ({ parsed: _parsed, timelineEntries: [] }),
+  fallback: fallbackAppend,
+  label: "Ax compilation",
+});
+
+// ---------------------------------------------------------------------------
+// Timeline extraction pipeline (used internally by compileTruth)
+// ---------------------------------------------------------------------------
+
+const timelineSig = f()
+  .input("newInfo", f.string("Information to extract timeline events from"))
+  .input("infoSource", f.string("Source identifier"))
+  .input("infoDate", f.string("Date of the information in YYYY-MM-DD format"))
+  .output("events", f.json(
+    "Array of timeline events with: date (YYYY-MM-DD), summary (max 120 chars), detail (optional)"
+  ))
+  .build();
+
+interface TimelineExtractInput {
+  newInfo: string;
+  infoSource: string;
+  infoDate: string;
+  pageSlug: string;
+}
+
+interface RawEvent { date?: string; summary?: string; detail?: string; }
+
+function parseEvents(raw: unknown): RawEvent[] {
+  if (Array.isArray(raw)) return raw as RawEvent[];
+  if (typeof raw === "string") {
+    try { return JSON.parse(raw) as RawEvent[]; } catch { return []; }
+  }
+  return [];
+}
+
+const timelinePipeline = new AIPipeline<TimelineExtractInput, RawEvent[], TimelineEntry[]>({
+  signature: timelineSig,
+  mapInput: (input) => ({
+    newInfo: input.newInfo,
+    infoSource: input.infoSource,
+    infoDate: input.infoDate,
+  }),
+  extractOutput: (raw) => raw.events,
+  parseRaw: parseEvents,
+  transform: (rawEvents, input) => rawEvents.map(e => ({
+    pageSlug: input.pageSlug,
+    date: String(e.date ?? input.infoDate),
+    source: input.infoSource,
+    summary: String(e.summary ?? "").slice(0, 120),
+    detail: String(e.detail ?? ""),
+  })),
+  fallback: () => [],
+  label: "Ax timeline extraction",
+});
+
+// ---------------------------------------------------------------------------
+// Public API (unchanged)
+// ---------------------------------------------------------------------------
+
+export async function compileTruth(
+  input: CompileInput,
+  llm: ResolvedLLM,
+): Promise<CompileResult> {
+  // Step 1: Main compilation via AIPipeline
+  const result = await compilePipeline.run(input, llm);
+
+  // If fallback was triggered, pipeline returns the full CompileResult
+  if ("compiledTruth" in result && !("parsed" in result)) {
+    return result as CompileResult;
+  }
+
+  // Step 2: Extract timeline entries via AIPipeline
+  const timelineInput: TimelineExtractInput = {
+    newInfo: input.newInfo,
+    infoSource: input.source,
+    infoDate: input.date,
+    pageSlug: input.pageContext?.slug ?? "",
+  };
+  const timelineEntries = await timelinePipeline.run(timelineInput, llm);
+
+  const compiled = result.parsed;
+  return {
+    compiledTruth: compiled.compiledTruth,
+    changed: compiled.changeType !== "none",
+    changeType: compiled.changeType,
+    changeSummary: compiled.changeSummary,
+    timelineEntries,
+    confidence: compiled.confidence,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
 function buildContext(input: CompileInput): string {
   const parts: string[] = [];
   if (input.pageContext) {
@@ -162,40 +201,6 @@ function buildContext(input: CompileInput): string {
     parts.push(recent.map(t => `  - ${t.date} | ${t.source}: ${t.summary}`).join("\n"));
   }
   return parts.join("\n\n") || "(no additional context)";
-}
-
-async function extractTimeline(
-  input: CompileInput,
-  aiClient: ReturnType<typeof createAxAI>,
-): Promise<TimelineEntry[]> {
-  if (!aiClient) return [];
-  try {
-    const result = await timelineGen.forward(aiClient, {
-      newInfo: input.newInfo,
-      infoSource: input.source,
-      infoDate: input.date,
-    });
-
-    const rawEvents = parseEvents(result.events);
-    const pageSlug = input.pageContext?.slug ?? "";
-    return rawEvents.map(e => ({
-      pageSlug,
-      date: String(e.date ?? input.date),
-      source: input.source,
-      summary: String(e.summary ?? "").slice(0, 120),
-      detail: String(e.detail ?? ""),
-    }));
-  } catch {
-    return [];
-  }
-}
-
-interface RawEvent { date?: string; summary?: string; detail?: string; }
-
-function parseEvents(raw: unknown): RawEvent[] {
-  if (Array.isArray(raw)) return raw as RawEvent[];
-  if (typeof raw === "string") { try { return JSON.parse(raw) as RawEvent[]; } catch { return []; } }
-  return [];
 }
 
 function fallbackAppend(input: CompileInput): CompileResult {

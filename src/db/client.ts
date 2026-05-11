@@ -4,7 +4,7 @@ import { SeekdbAdminClient, SeekdbClient, DEFAULT_PORT, DEFAULT_USER } from "see
 import type { Collection } from "seekdb";
 import type { ResolvedSettings } from "../settings";
 import { createBrainEmbeddingFunction } from "../ai/embed-factory";
-import { DEFAULT_DB_NAME, PAGES_COLLECTION } from "../config";
+import { DEFAULT_DB_NAME, PAGES_COLLECTION } from "../slug-utils";
 import { SQL_SCHEMA } from "./schema";
 import { DbError, wrapDbError, DbErrorCategory } from "./errors";
 

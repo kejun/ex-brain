@@ -1,5 +1,5 @@
-import { readFile, stat } from "node:fs/promises";
-import { basename, extname, resolve } from "node:path";
+import { readFile, readdir, stat } from "node:fs/promises";
+import { basename, extname, join, resolve } from "node:path";
 
 /** Supported document kinds for ingestion. */
 export type DocumentKind =
@@ -483,4 +483,32 @@ function looksLikeText(bytes: Buffer): boolean {
     }
   }
   return textLike / sample.length >= 0.95;
+}
+
+/** File extensions eligible for document ingestion (binary/office formats). */
+const DOCUMENT_EXTENSIONS = new Set(["pdf", "docx"]);
+
+/**
+ * Recursively collect `.docx` and `.pdf` files under `dir`.
+ * Returns sorted absolute paths.
+ */
+export async function collectDocumentFiles(dir: string): Promise<string[]> {
+  const root = resolve(dir);
+  const files: string[] = [];
+  async function walk(current: string): Promise<void> {
+    const entries = await readdir(current, { withFileTypes: true });
+    for (const entry of entries) {
+      const next = join(current, entry.name);
+      if (entry.isDirectory()) {
+        await walk(next);
+      } else if (
+        entry.isFile() &&
+        DOCUMENT_EXTENSIONS.has(extname(entry.name).toLowerCase().replace(/^\./, ""))
+      ) {
+        files.push(next);
+      }
+    }
+  }
+  await walk(root);
+  return files.sort();
 }

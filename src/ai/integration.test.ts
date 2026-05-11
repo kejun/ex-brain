@@ -2,7 +2,7 @@
  * 综合集成测试: 时间线提取、编译、实体提取完整流程
  */
 
-import { test, expect, describe } from "bun:test";
+import { test, expect, describe, beforeEach } from "bun:test";
 import { BrainDb } from "../db/client";
 import { BrainRepository } from "../repositories/brain-repo";
 import { loadSettings } from "../settings";
@@ -14,12 +14,14 @@ import { extractTimelineEvents, type TimelineExtractionInput } from "./timeline-
 const TEST_DB = "/tmp/ebrain-test-comprehensive.db";
 const TEST_DB_2 = "/tmp/ebrain-test-comprehensive-2.db";
 
-const llm: ResolvedLLM = {
-  baseURL: "https://coding.dashscope.aliyuncs.com/v1",
-  model: "qwen3.5-plus",
-  apiKey: process.env.DASHSCOPE_API_KEY ?? "",
-  apiKeyEnv: "DASHSCOPE_API_KEY",
-};
+// Read LLM config from settings.json so it works out of the box
+let _llm: ResolvedLLM | null = null;
+async function getLLM(): Promise<ResolvedLLM> {
+  if (_llm) return _llm;
+  const s = await loadSettings();
+  _llm = s.llm;
+  return _llm;
+}
 
 async function freshRepo(dbPath: string) {
   try { require("fs").unlinkSync(dbPath); } catch {}
@@ -34,6 +36,10 @@ async function freshRepo(dbPath: string) {
 // ===========================================================================
 
 describe("时间线提取", () => {
+  // Avoid rate limiting on DashScope free tier
+  const delay = () => new Promise(r => setTimeout(r, 3000));
+  beforeEach(async () => { await delay(); });
+
   test("多事件混合: 中文+英文+相对日期", async () => {
     const input: TimelineExtractionInput = {
       content: `River AI 成立于 2020 年。2021 年 3 月获得种子轮融资。
@@ -43,7 +49,7 @@ describe("时间线提取", () => {
       pageSlug: "companies/river-ai",
     };
 
-    const result = await extractTimelineEvents(input, llm);
+    const result = await extractTimelineEvents(input, await getLLM());
     console.log("📅 多事件提取:", result.entries.length, "条事件");
     for (const e of result.entries) {
       console.log(`   ${e.date} | ${e.summary}`);
@@ -64,7 +70,7 @@ describe("时间线提取", () => {
       pageSlug: "companies/test",
     };
 
-    const result = await extractTimelineEvents(input, llm);
+    const result = await extractTimelineEvents(input, await getLLM());
     console.log("📅 中文日期:", result.entries.length, "条事件");
     for (const e of result.entries) {
       console.log(`   ${e.date} | ${e.summary}`);
@@ -82,7 +88,7 @@ describe("时间线提取", () => {
       pageSlug: "notes/plain",
     };
 
-    const result = await extractTimelineEvents(input, llm);
+    const result = await extractTimelineEvents(input, await getLLM());
     console.log("📅 无事件内容:", result.entries.length, "条事件");
     // LLM 可能会从描述性文字中提取事件，但不应该崩溃
     expect(result.entries).toBeInstanceOf(Array);
@@ -94,6 +100,9 @@ describe("时间线提取", () => {
 // ===========================================================================
 
 describe("编译器", () => {
+  const delay = () => new Promise(r => setTimeout(r, 3000));
+  beforeEach(async () => { await delay(); });
+
   test("状态更新: 融资阶段变更", async () => {
     const input: CompileInput = {
       currentTruth: "## Status\n\n- **Funding Stage**: Seed\n- **Valuation**: ~$10M",
@@ -104,7 +113,7 @@ describe("编译器", () => {
       pageContext: { slug: "companies/river-ai", type: "company", title: "River AI" },
     };
 
-    const result = await compileTruth(input, llm);
+    const result = await compileTruth(input, await getLLM());
     console.log("\n🧠 融资变更:");
     console.log("   changeType:", result.changeType);
     console.log("   confidence:", result.confidence);
@@ -129,7 +138,7 @@ describe("编译器", () => {
       pageContext: { slug: "companies/river-ai", type: "company", title: "River AI" },
     };
 
-    const result = await compileTruth(input, llm);
+    const result = await compileTruth(input, await getLLM());
     console.log("\n🧠 新增事实:");
     console.log("   changeType:", result.changeType);
     console.log("   confidence:", result.confidence);
@@ -150,7 +159,7 @@ describe("编译器", () => {
       pageContext: { slug: "companies/river-ai", type: "company", title: "River AI" },
     };
 
-    const result = await compileTruth(input, llm);
+    const result = await compileTruth(input, await getLLM());
     console.log("\n🧠 首次编译:");
     console.log("   changeType:", result.changeType);
     console.log("   truth:", result.compiledTruth.slice(0, 100));
@@ -166,10 +175,13 @@ describe("编译器", () => {
 // ===========================================================================
 
 describe("实体提取", () => {
-  test("中文人名和公司名识别", async () => {
+  const delay = () => new Promise(r => setTimeout(r, 3000));
+  beforeEach(async () => { await delay(); });
+
+  test("中文人名和公司名识别", { timeout: 60000 }, async () => {
     const content = `张三 是 阿里巴巴 的高级工程师，毕业于 清华大学。他曾在 Google 工作 3 年，2022 年加入 阿里巴巴。`;
     
-    const relations = await extractRelations(content, llm);
+    const relations = await extractRelations(content, await getLLM());
     console.log("\n🔗 中文实体:", relations.length, "条关系");
     for (const r of relations) {
       console.log(`   ${r.from.name}(${r.from.type}) --${r.relation}--> ${r.to.name}(${r.to.type}) conf=${r.confidence}`);
@@ -186,7 +198,7 @@ describe("实体提取", () => {
   test("英文实体识别", async () => {
     const content = `John Smith founded River AI in 2020. The company raised $50M Series A from Sequoia Capital. Sarah Chen joined as COO from Snowflake.`;
     
-    const relations = await extractRelations(content, llm);
+    const relations = await extractRelations(content, await getLLM());
     console.log("\n🔗 英文实体:", relations.length, "条关系");
     for (const r of relations) {
       console.log(`   ${r.from.name}(${r.from.type}) --${r.relation}--> ${r.to.name}(${r.to.type}) conf=${r.confidence}`);
@@ -201,12 +213,12 @@ describe("实体提取", () => {
   }, 30000);
 
   test("空内容: 返回空数组", async () => {
-    const relations = await extractRelations("", llm);
+    const relations = await extractRelations("", await getLLM());
     expect(relations).toEqual([]);
   });
 
   test("无实体内容: 返回空数组", async () => {
-    const relations = await extractRelations("这是一段没有任何实体或关系的普通文字。", llm);
+    const relations = await extractRelations("这是一段没有任何实体或关系的普通文字。", await getLLM());
     console.log("\n🔗 无实体内容:", relations.length, "条关系");
     expect(relations).toBeInstanceOf(Array);
   }, 30000);
@@ -217,7 +229,10 @@ describe("实体提取", () => {
 // ===========================================================================
 
 describe("端到端: 完整 import 流程", () => {
-  test("导入文章 → 提取实体 → 创建页面和链接", async () => {
+  const delay = () => new Promise(r => setTimeout(r, 5000));
+  beforeEach(async () => { await delay(); });
+
+  test("导入文章 → 提取实体 → 创建页面和链接", { timeout: 60000 }, async () => {
     const { repo, db } = await freshRepo(TEST_DB_2);
 
     // 模拟 import 流程
@@ -240,7 +255,7 @@ Microsoft 已投资 OpenAI 超过 130 亿美元。Amazon 与 Anthropic 达成战
     });
 
     // Step 2: 提取实体关系
-    const relations = await extractRelations(articleContent, llm);
+    const relations = await extractRelations(articleContent, await getLLM());
     console.log("\n🔗 提取到", relations.length, "条关系");
     for (const r of relations) {
       console.log(`   ${r.from.name} --${r.relation}--> ${r.to.name}`);

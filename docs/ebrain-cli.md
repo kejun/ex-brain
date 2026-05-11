@@ -163,7 +163,7 @@ bun run dist/cli.js --help
 - `ebrain tag remove <slug> <tag>`
 - `ebrain raw get <slug> [--source x]`
 - `ebrain raw set <slug> --source x --data '{"a":1}'`（也支持 `--stdin`）
-- `ebrain import <dir>`（支持 `--dry-run` 预览；`--skip-index` 跳过向量索引以避免 seekdb 崩溃）
+- `ebrain import <paths...>`（支持 `--dry-run` 预览；`--skip-index` 跳过向量索引以避免 seekdb 崩溃。接受目录和/或文件，支持 shell glob 如 `*.docx`）
 - `ebrain export --dir <dir>`
 - `ebrain ingest [source] [--type doc] [--slug …] [--format pdf|docx|html|json|markdown|text] [--max-bytes N] [--timeout ms]` — 接受本地文件路径或 `http(s)://` URL，自动抽取 PDF / Word `.docx` / HTML / JSON / 纯文本（亦支持 `--stdin`），详见 `docs/document-ingestion.md`
 - `ebrain embed <slug>` / `ebrain embed --all`

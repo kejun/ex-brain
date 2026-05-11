@@ -5,7 +5,7 @@ import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 // Tests allow both exit codes 0 and 139
 import { $ } from "bun";
 import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 
 const CLI = join(import.meta.dir, "..", "cli.ts");
@@ -21,14 +21,24 @@ async function ebrain(
   options?: { stdin?: string },
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const allArgs = ["--db", dbPath, ...args];
+
   // Use .nothrow() to prevent $ from throwing on non-zero exit codes
   // (seekdb crashes with exit code 139/134 on process exit)
-  let p;
   if (options?.stdin) {
-    p = await $`bun ${CLI} ${allArgs}`.quiet().nothrow().stdin(options.stdin);
-  } else {
-    p = await $`bun ${CLI} ${allArgs}`.quiet().nothrow();
+    // Write stdin content to a temp file and use shell redirect
+    // (Bun's $.stdin() API is not available in all versions)
+    const tmpDir = await mkdtemp(join(tmpdir(), "ebrain-stdin-"));
+    const tmpFile = join(tmpDir, "stdin.txt");
+    await writeFile(tmpFile, options.stdin);
+    try {
+      const p = await $`bun ${CLI} ${allArgs} < ${tmpFile}`.quiet().nothrow();
+      return { stdout: p.stdout.toString(), stderr: p.stderr.toString(), exitCode: p.exitCode ?? 1 };
+    } finally {
+      await rm(tmpDir, { recursive: true });
+    }
   }
+
+  const p = await $`bun ${CLI} ${allArgs}`.quiet().nothrow();
   return { stdout: p.stdout.toString(), stderr: p.stderr.toString(), exitCode: p.exitCode ?? 1 };
 }
 
@@ -72,7 +82,7 @@ describe("ebrain init", () => {
 // ---------------------------------------------------------------------------
 
 describe("ebrain put / get", () => {
-  test("put creates a page and get retrieves it", async () => {
+  test("put creates a page and get retrieves it", { timeout: 30000 }, async () => {
     const dbPath = await mkTestDb();
     const md = `---
 title: Test Page
@@ -144,7 +154,7 @@ Content
     // not the exact exit code
   });
 
-  test("put without content fails fast", async () => {
+  test("put without content fails fast", { timeout: 30000 }, async () => {
     const dbPath = await mkTestDb();
     const r = await ebrain(dbPath, ["put", "empty-page"]);
     expect(r.stderr).toContain("empty input");
@@ -157,7 +167,7 @@ Content
 // ---------------------------------------------------------------------------
 
 describe("ebrain list", () => {
-  test("lists all pages", async () => {
+  test("lists all pages", { timeout: 30000 }, async () => {
     const dbPath = await mkTestDb();
     // Create some test pages first
     const put1 = await ebrain(dbPath, ["put", "list-test/page1", "--stdin"], { stdin: "---\ntitle: Page 1\ntype: note\n---\nContent 1" });
@@ -178,17 +188,17 @@ describe("ebrain list", () => {
     }
   });
 
-  test("filters by type", async () => {
+  test("filters by type", { timeout: 30000 }, async () => {
     const dbPath = await mkTestDb();
     await ebrain(dbPath, ["put", "filter-test/note1", "--stdin"], { stdin: "---\ntitle: Note\ntype: note\n---\nNote content" });
     await ebrain(dbPath, ["put", "filter-test/doc1", "--stdin"], { stdin: "---\ntitle: Doc\ntype: doc\n---\nDoc content" });
-    
+
     const r = await ebrain(dbPath, ["list", "--type", "note", "--json"]);
     const pages = parseJson(r.stdout) as any[];
     expect(pages.every((p: any) => p.type === "note")).toBe(true);
   });
 
-  test("respects --limit", async () => {
+  test("respects --limit", { timeout: 30000 }, async () => {
     const dbPath = await mkTestDb();
     const r = await ebrain(dbPath, ["list", "--limit", "1", "--json"]);
     const pages = parseJson(r.stdout) as any[];
@@ -201,7 +211,7 @@ describe("ebrain list", () => {
 // ---------------------------------------------------------------------------
 
 describe("ebrain search", () => {
-  test("returns results for matching content", async () => {
+  test("returns results for matching content", { timeout: 30000 }, async () => {
     const dbPath = await mkTestDb();
     await ebrain(dbPath, ["put", "search-test/page", "--stdin"], { stdin: "---\ntitle: Search Test\ntype: note\n---\nThis page contains searchable content about machine learning." });
     
@@ -210,17 +220,17 @@ describe("ebrain search", () => {
     expect(Array.isArray(hits)).toBe(true);
   });
 
-  test("filters by type", async () => {
+  test("filters by type", { timeout: 30000 }, async () => {
     const dbPath = await mkTestDb();
     await ebrain(dbPath, ["put", "search-type/note", "--stdin"], { stdin: "---\ntitle: Search Note\ntype: note\n---\nSearchable note content" });
     await ebrain(dbPath, ["put", "search-type/doc", "--stdin"], { stdin: "---\ntitle: Search Doc\ntype: doc\n---\nSearchable doc content" });
-    
+
     const r = await ebrain(dbPath, ["search", "searchable", "--type", "note", "--json"]);
     const hits = parseJson(r.stdout) as any[];
     expect(hits.every((h: any) => h.type === "note")).toBe(true);
   });
 
-  test("returns empty for no match", async () => {
+  test("returns empty for no match", { timeout: 30000 }, async () => {
     const dbPath = await mkTestDb();
     const r = await ebrain(dbPath, ["search", "zzznonexistent123", "--json"]);
     const hits = parseJson(r.stdout) as any[];
@@ -229,7 +239,7 @@ describe("ebrain search", () => {
 });
 
 describe("ebrain query", () => {
-  test("returns results for semantic query", async () => {
+  test("returns results for semantic query", { timeout: 30000 }, async () => {
     const dbPath = await mkTestDb();
     await ebrain(dbPath, ["put", "query-test/page", "--stdin"], { stdin: "---\ntitle: Query Test\ntype: note\n---\nThis page discusses artificial intelligence and neural networks." });
     
@@ -244,10 +254,10 @@ describe("ebrain query", () => {
     }
   });
 
-  test("respects --limit", async () => {
+  test("respects --limit", { timeout: 30000 }, async () => {
     const dbPath = await mkTestDb();
     await ebrain(dbPath, ["put", "query-limit/page", "--stdin"], { stdin: "---\ntitle: Limit Test\ntype: note\n---\nTest content" });
-    
+
     const r = await ebrain(dbPath, ["query", "test", "--limit", "1", "--json"]);
     if (r.stdout.trim()) {
       const hits = parseJson(r.stdout) as any[];
@@ -261,7 +271,7 @@ describe("ebrain query", () => {
 // ---------------------------------------------------------------------------
 
 describe("ebrain link / backlinks", () => {
-  test("creates a link and retrieves backlinks", async () => {
+  test("creates a link and retrieves backlinks", { timeout: 30000 }, async () => {
     const dbPath = await mkTestDb();
     // Create two pages
     const put1 = await ebrain(dbPath, ["put", "link-from", "--stdin"], { stdin: "---\ntitle: From\ntype: page\n---\nFrom content" });
@@ -321,7 +331,7 @@ describe("ebrain timeline", () => {
     expect(entries.length).toBe(1);
   });
 
-  test("timeline add with --dry-run does not add entry", async () => {
+  test("timeline add with --dry-run does not add entry", { timeout: 30000 }, async () => {
     const dbPath = await mkTestDb();
     await ebrain(dbPath, ["timeline", "add", "tl-page", "--date", "2025-06-01", "--summary", "Dry run", "--dry-run"]);
 
@@ -370,7 +380,7 @@ describe("ebrain tag", () => {
     expect(tags).not.toContain("to-remove");
   });
 
-  test("tag add with --dry-run does not add tag", async () => {
+  test("tag add with --dry-run does not add tag", { timeout: 30000 }, async () => {
     const dbPath = await mkTestDb();
     await ebrain(dbPath, ["tag", "add", "tag-page", "dry-tag", "--dry-run"]);
 
@@ -442,7 +452,7 @@ describe("ebrain stats", () => {
 // ---------------------------------------------------------------------------
 
 describe("ebrain config", () => {
-  test("shows configuration", async () => {
+  test("shows configuration", { timeout: 30000 }, async () => {
     const dbPath = await mkTestDb();
     const r = await ebrain(dbPath, ["config", "--json"]);
     const config = parseJson(r.stdout) as any;

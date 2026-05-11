@@ -1,4 +1,4 @@
-import { nowIso } from "../config";
+import { nowIso } from "../slug-utils";
 import type {
   BrainStats,
   PageRecord,
@@ -628,6 +628,48 @@ export class BrainRepository {
       logDbError(dbError);
       throw dbError;
     }
+  }
+
+  /**
+   * Sync tags from frontmatter to the page_tags table.
+   * This ensures `ebrain list --tag <tag>` works correctly for pages
+   * created via `put` with frontmatter tags.
+   */
+  async syncTagsFromFrontmatter(slug: string, frontmatter: Record<string, unknown>): Promise<number> {
+    const fmTags = frontmatter.tags;
+    if (!fmTags) return 0;
+
+    const tags: string[] = Array.isArray(fmTags)
+      ? fmTags.filter((t): t is string => typeof t === "string")
+      : typeof fmTags === "string"
+        ? [fmTags]
+        : [];
+
+    if (tags.length === 0) return 0;
+
+    // Get current DB tags for this page
+    const existingTags = new Set(await this.tags(slug));
+    const desiredTags = new Set(tags);
+
+    let synced = 0;
+
+    // Add missing tags
+    for (const tag of desiredTags) {
+      if (!existingTags.has(tag)) {
+        await this.tag(slug, tag);
+        synced++;
+      }
+    }
+
+    // Remove tags no longer in frontmatter
+    for (const tag of existingTags) {
+      if (!desiredTags.has(tag)) {
+        await this.untag(slug, tag);
+        synced++;
+      }
+    }
+
+    return synced;
   }
 
   async readRaw(slug: string, source?: string): Promise<unknown[]> {

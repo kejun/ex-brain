@@ -128,6 +128,26 @@ ebrain tag add <slug> <tag>         # idempotent
 ebrain tag remove <slug> <tag>
 ```
 
+### Bulk Import
+
+`ebrain import` accepts directories (recursive), individual files, or any mix. Shell glob patterns work naturally:
+
+```bash
+# Import a directory (recursive, backward compatible)
+ebrain import ./docs
+
+# Import all matching files via shell glob
+ebrain import *.docx
+ebrain import *.pdf *.docx
+
+# Mix files and directories
+ebrain import report.pdf notes.md ./docs
+
+# Options
+ebrain import ./docs --dry-run      # preview without writing
+ebrain import ./docs --skip-index   # skip vector indexing (avoid seekdb crash)
+```
+
 ### Page Creation (put)
 
 `ebrain put` accepts markdown files **and** auto-detects non-markdown documents (PDF, DOCX, HTML, TXT, JSON) and http(s) URLs. Markdown files go through `parsePageMarkdown` (preserving frontmatter, timelines, wiki links); non-markdown files go through `loadDocument` for text extraction. Re-importing identical content is detected via content hash — the operation is instantly skipped without side-effects.

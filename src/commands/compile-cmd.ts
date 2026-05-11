@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import { basename } from "node:path";
-import { normalizeLongSlug, slugify } from "../config";
+import { normalizeLongSlug, slugify } from "../slug-utils";
 import { readMaybeStdin, readTextFile } from "../markdown/io";
 import { loadSettings } from "../settings";
 import { BrainRepository } from "../repositories/brain-repo";
