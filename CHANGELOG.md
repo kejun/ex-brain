@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-13
+
 ### Added
 
 - **Content Hash Idempotency**: `ebrain put` now stores a SHA-256 content hash in `frontmatter._contentHash`. Re-importing identical content is detected instantly — the operation is skipped before any side-effect (timeline, raw_data, LLM entity extraction) runs. Updating changed content still works normally.
