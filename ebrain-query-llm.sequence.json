@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "ebrain query --llm 消费图谱流程",
+    "subtitle": "语义检索 → 三层上下文收集 → LLM 流式生成",
+    "output": "ebrain-query-llm-sequence.html",
+    "viewBox": [1000, 1600]
+  },
+  "participants": [
+    { "id": "user", "type": "external", "label": "用户", "sublabel": "CLI 终端" },
+    { "id": "cli", "type": "frontend", "label": "CLI", "sublabel": "query-cmd.ts" },
+    { "id": "repo", "type": "backend", "label": "BrainRepo", "sublabel": "brain-repo.ts" },
+    { "id": "seekdb", "type": "database", "label": "SeekDB", "sublabel": "向量 + SQL 统一存储" },
+    { "id": "ctx", "type": "backend", "label": "ContextCollector", "sublabel": "collectContextForLLM" },
+    { "id": "llm", "type": "cloud", "label": "LLM API", "sublabel": "OpenAI 兼容" }
+  ],
+  "segments": [
+    { "from": 160, "to": 340, "label": "Phase 1: Semantic Search" },
+    { "from": 380, "to": 800, "label": "Phase 2: 3-Layer Context" },
+    { "from": 840, "to": 1060, "label": "Phase 3: LLM Streaming" }
+  ],
+  "messages": [
+    { "from": "user", "to": "cli", "y": 195, "label": "ebrain query --llm", "variant": "emphasis" },
+    { "from": "cli", "to": "repo", "y": 230, "label": "repo.query(question, limit)", "variant": "emphasis" },
+    { "from": "repo", "to": "seekdb", "y": 265, "label": "pagesCollection.query() vector search", "variant": "emphasis" },
+    { "from": "seekdb", "to": "repo", "y": 310, "label": "hits + distances", "variant": "return" },
+    { "from": "cli", "to": "ctx", "y": 420, "label": "collectContextForLLM(topN, 100K chars)", "variant": "emphasis" },
+    { "from": "ctx", "to": "repo", "y": 465, "label": "L1: getPage(slug) → compiled_truth", "variant": "emphasis" },
+    { "from": "ctx", "to": "repo", "y": 525, "label": "L2: readRaw(slug) → raw JSON/text", "variant": "default" },
+    { "from": "ctx", "to": "repo", "y": 585, "label": "L3: outgoingLinks + backlinks", "variant": "dashed" },
+    { "from": "repo", "to": "seekdb", "y": 630, "label": "SELECT pages/links/raw_data", "variant": "default" },
+    { "from": "seekdb", "to": "ctx", "y": 675, "label": "raw rows + link relations", "variant": "return" },
+    { "from": "ctx", "to": "cli", "y": 745, "label": "sections[] + stats (3 layers)", "variant": "return" },
+    { "from": "cli", "to": "llm", "y": 875, "label": "POST /chat/completions (stream)", "variant": "emphasis" },
+    { "from": "llm", "to": "cli", "y": 925, "label": "SSE delta.content chunks", "variant": "return" },
+    { "from": "cli", "to": "user", "y": 975, "label": "stdout answer + stderr Sources", "variant": "return" }
+  ],
+  "activations": [
+    { "participant": "cli", "from": 188, "to": 350, "type": "frontend" },
+    { "participant": "repo", "from": 223, "to": 320, "type": "backend" },
+    { "participant": "seekdb", "from": 258, "to": 318, "type": "database" },
+    { "participant": "ctx", "from": 413, "to": 755, "type": "backend" },
+    { "participant": "seekdb", "from": 623, "to": 685, "type": "database" },
+    { "participant": "llm", "from": 868, "to": 935, "type": "cloud" },
+    { "participant": "cli", "from": 868, "to": 1000, "type": "frontend" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Phase 1: 语义检索",
+      "items": [
+        "sanitizeQuery() 清洗输入防止解析错误",
+        "SeekDB 向量集合语义搜索，返回 hits + distances",
+        "综合打分 = vectorScore × 0.85 + freshness(30天内+0.1) + typeBonus(person+0.05)"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Phase 2: 三层上下文收集",
+      "items": [
+        "Layer 1 主页面：compiled_truth + timeline",
+        "Layer 2 原始文档：raw_data 表的 JSON/text 数据",
+        "Layer 3 关联页面：outgoingLinks + backlinks 双向发现，keywordRelevance 打分过滤(≥0.02)",
+        "预算控制 100K 字符上限，超长内容自动截断"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Phase 3: LLM 流式生成",
+      "items": [
+        "组装 prompt 分三层展示（正文 / 原始文档 / 关联页面）",
+        "POST /chat/completions SSE 流式响应，temperature=0.3",
+        "stdout 实时流式输出回答，stderr 输出带 slug 的来源列表"
+      ]
+    }
+  ]
+}

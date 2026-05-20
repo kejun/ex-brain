@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ex-brain Architecture Diagram</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f8fafc;
+      min-height: 100vh;
+      padding: 2rem;
+      color: #1e293b;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    .header {
+      margin-bottom: 2rem;
+      text-align: center;
+    }
+    
+    .header-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+      margin-bottom: 0.5rem;
+    }
+    
+    .pulse-dot {
+      width: 10px;
+      height: 10px;
+      background: #3b82f6;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
+      50% { opacity: 0.8; box-shadow: 0 0 0 8px rgba(59, 130, 246, 0); }
+    }
+    
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: #0f172a;
+      letter-spacing: -0.025em;
+    }
+    
+    .subtitle {
+      color: #64748b;
+      font-size: 0.875rem;
+      margin-top: 0.25rem;
+    }
+    
+    .diagram-container {
+      background: #ffffff;
+      border-radius: 1rem;
+      border: 1px solid #e2e8f0;
+      padding: 2rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 4px 12px rgba(0,0,0,0.03);
+    }
+    
+    svg {
+      width: 100%;
+      display: block;
+    }
+    
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+    
+    .card {
+      background: #ffffff;
+      border-radius: 0.75rem;
+      border: 1px solid #e2e8f0;
+      padding: 1.25rem;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+    
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+    
+    .card-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+    
+    .card-dot.blue { background: #3b82f6; }
+    .card-dot.green { background: #10b981; }
+    .card-dot.purple { background: #8b5cf6; }
+    .card-dot.orange { background: #f59e0b; }
+    
+    .card h3 {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #1e293b;
+    }
+    
+    .card ul {
+      list-style: none;
+      color: #64748b;
+      font-size: 0.8rem;
+      line-height: 1.6;
+    }
+    
+    .card li {
+      margin-bottom: 0.25rem;
+    }
+    
+    .card li::before {
+      content: "•";
+      margin-right: 0.5rem;
+      color: #94a3b8;
+    }
+    
+    .footer {
+      text-align: center;
+      margin-top: 1.5rem;
+      color: #94a3b8;
+      font-size: 0.75rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>ex-brain 整体架构</h1>
+      </div>
+      <p class="subtitle">基于 seekdb 的个人知识库 CLI — 智能编译 · 时间线 · 实体链接 · 混合搜索 · MCP</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1080 760">
+        <defs>
+          <!-- Arrow markers -->
+          <marker id="arrow-blue" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#3b82f6"/>
+          </marker>
+          <marker id="arrow-green" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#10b981"/>
+          </marker>
+          <marker id="arrow-purple" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#8b5cf6"/>
+          </marker>
+          <marker id="arrow-orange" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#f59e0b"/>
+          </marker>
+          <marker id="arrow-red" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#ef4444"/>
+          </marker>
+          <marker id="arrow-gray" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8"/>
+          </marker>
+          
+          <!-- Subtle shadow for depth -->
+          <filter id="shadow-sm" x="-5%" y="-5%" width="110%" height="115%">
+            <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#00000008"/>
+          </filter>
+        </defs>
+
+        <!-- ============================================================
+             LAYER 1: 用户界面层
+             ============================================================ -->
+        <rect x="30" y="20" width="1020" height="90" rx="12" fill="none" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="6,3"/>
+        <text x="46" y="38" fill="#64748b" font-size="11" font-weight="600" font-family="Inter, sans-serif">用户界面层</text>
+        
+        <!-- CLI -->
+        <rect x="100" y="50" width="220" height="42" rx="8" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5" filter="url(#shadow-sm)"/>
+        <text x="210" y="76" text-anchor="middle" fill="#1e40af" font-size="14" font-weight="600" font-family="JetBrains Mono, monospace">CLI (ebrain)</text>
+        
+        <!-- MCP Server -->
+        <rect x="390" y="50" width="220" height="42" rx="8" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1.5" filter="url(#shadow-sm)"/>
+        <text x="500" y="76" text-anchor="middle" fill="#065f46" font-size="14" font-weight="600" font-family="JetBrains Mono, monospace">MCP Server</text>
+        
+        <!-- Web UI -->
+        <rect x="680" y="50" width="220" height="42" rx="8" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="1.5" filter="url(#shadow-sm)"/>
+        <text x="790" y="76" text-anchor="middle" fill="#6d28d9" font-size="14" font-weight="600" font-family="JetBrains Mono, monospace">Web UI (知识图谱)</text>
+
+        <!-- Arrows L1 → L2 (CLI→put/get, MCP→compile, WebUI→graph) -->
+        <path d="M 210 92 L 210 135 L 110 160" fill="none" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+        <path d="M 500 92 L 500 135 L 485 160" fill="none" stroke="#10b981" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+        <path d="M 790 92 L 790 135 L 285 160" fill="none" stroke="#8b5cf6" stroke-width="1.5" marker-end="url(#arrow-purple)"/>
+
+        <!-- ============================================================
+             LAYER 2: 命令层
+             ============================================================ -->
+        <rect x="30" y="130" width="1020" height="130" rx="12" fill="none" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="6,3"/>
+        <text x="46" y="150" fill="#64748b" font-size="11" font-weight="600" font-family="Inter, sans-serif">命令层</text>
+        
+        <!-- Row 1 commands -->
+        <rect x="55" y="160" width="110" height="36" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
+        <text x="110" y="182" text-anchor="middle" fill="#334155" font-size="12" font-family="JetBrains Mono, monospace">put / get</text>
+        
+        <rect x="180" y="160" width="110" height="36" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
+        <text x="235" y="182" text-anchor="middle" fill="#334155" font-size="12" font-family="JetBrains Mono, monospace">search</text>
+        
+        <rect x="305" y="160" width="110" height="36" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
+        <text x="360" y="182" text-anchor="middle" fill="#334155" font-size="12" font-family="JetBrains Mono, monospace">query</text>
+        
+        <rect x="430" y="160" width="110" height="36" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
+        <text x="485" y="182" text-anchor="middle" fill="#334155" font-size="12" font-family="JetBrains Mono, monospace">compile</text>
+        
+        <rect x="555" y="160" width="110" height="36" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
+        <text x="610" y="182" text-anchor="middle" fill="#334155" font-size="12" font-family="JetBrains Mono, monospace">timeline</text>
+        
+        <rect x="680" y="160" width="110" height="36" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
+        <text x="735" y="182" text-anchor="middle" fill="#334155" font-size="12" font-family="JetBrains Mono, monospace">link</text>
+        
+        <rect x="805" y="160" width="110" height="36" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
+        <text x="860" y="182" text-anchor="middle" fill="#334155" font-size="12" font-family="JetBrains Mono, monospace">ingest</text>
+        
+        <!-- Row 2 commands -->
+        <rect x="55" y="210" width="140" height="36" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
+        <text x="125" y="232" text-anchor="middle" fill="#334155" font-size="12" font-family="JetBrains Mono, monospace">tag / list</text>
+        
+        <rect x="215" y="210" width="140" height="36" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
+        <text x="285" y="232" text-anchor="middle" fill="#334155" font-size="12" font-family="JetBrains Mono, monospace">graph</text>
+        
+        <rect x="375" y="210" width="140" height="36" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
+        <text x="445" y="232" text-anchor="middle" fill="#334155" font-size="12" font-family="JetBrains Mono, monospace">import / export</text>
+        
+        <rect x="535" y="210" width="140" height="36" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
+        <text x="605" y="232" text-anchor="middle" fill="#334155" font-size="12" font-family="JetBrains Mono, monospace">serve</text>
+        
+        <rect x="695" y="210" width="140" height="36" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
+        <text x="765" y="232" text-anchor="middle" fill="#334155" font-size="12" font-family="JetBrains Mono, monospace">init / stats</text>
+
+        <!-- Arrows L2 → L3 (compile→BrainRepository, ingest→Config) -->
+        <path d="M 485 196 L 485 305 L 300 328" fill="none" stroke="#10b981" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+        <path d="M 860 196 L 860 305 L 630 328" fill="none" stroke="#f59e0b" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+
+        <!-- ============================================================
+             LAYER 3: 仓库层
+             ============================================================ -->
+        <rect x="30" y="300" width="1020" height="75" rx="12" fill="none" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="6,3"/>
+        <text x="46" y="318" fill="#64748b" font-size="11" font-weight="600" font-family="Inter, sans-serif">仓库层</text>
+        
+        <!-- BrainRepository -->
+        <rect x="100" y="328" width="400" height="34" rx="8" fill="#fff7ed" stroke="#fed7aa" stroke-width="1.5" filter="url(#shadow-sm)"/>
+        <text x="300" y="350" text-anchor="middle" fill="#9a3412" font-size="13" font-weight="600" font-family="JetBrains Mono, monospace">BrainRepository</text>
+        
+        <!-- Config -->
+        <rect x="540" y="328" width="180" height="34" rx="8" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1.5" filter="url(#shadow-sm)"/>
+        <text x="630" y="350" text-anchor="middle" fill="#065f46" font-size="13" font-family="JetBrains Mono, monospace">Config / Settings</text>
+        
+        <!-- Markdown Parser -->
+        <rect x="760" y="328" width="180" height="34" rx="8" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="1.5" filter="url(#shadow-sm)"/>
+        <text x="850" y="350" text-anchor="middle" fill="#6d28d9" font-size="13" font-family="JetBrains Mono, monospace">Markdown Parser</text>
+
+        <!-- Arrows L3 → L4 (BrainRepository→AxAdapter+EntityLinker, Config→seekdb) -->
+        <path d="M 300 362 L 300 420 L 170 445" fill="none" stroke="#8b5cf6" stroke-width="1.5" marker-end="url(#arrow-purple)"/>
+        <path d="M 300 362 L 300 420 L 420 445" fill="none" stroke="#8b5cf6" stroke-width="1.5" marker-end="url(#arrow-purple)"/>
+        <path d="M 630 362 L 630 420 L 800 445" fill="none" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+
+        <!-- ============================================================
+             LAYER 4a: AI 层 (LEFT)
+             ============================================================ -->
+        <rect x="30" y="415" width="500" height="130" rx="12" fill="none" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="6,3"/>
+        <text x="46" y="433" fill="#64748b" font-size="11" font-weight="600" font-family="Inter, sans-serif">AI 层</text>
+        
+        <!-- Ax Signature -->
+        <rect x="60" y="445" width="170" height="34" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
+        <text x="145" y="466" text-anchor="middle" fill="#334155" font-size="12" font-family="JetBrains Mono, monospace">Ax Signature</text>
+        
+        <!-- AIPipeline -->
+        <rect x="250" y="445" width="170" height="34" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
+        <text x="335" y="466" text-anchor="middle" fill="#334155" font-size="12" font-family="JetBrains Mono, monospace">AIPipeline</text>
+        
+        <!-- Compiler -->
+        <rect x="60" y="490" width="120" height="34" rx="6" fill="#fff7ed" stroke="#fed7aa" stroke-width="1.5"/>
+        <text x="120" y="511" text-anchor="middle" fill="#9a3412" font-size="12" font-family="JetBrains Mono, monospace">Compiler</text>
+        
+        <!-- Timeline Extractor -->
+        <rect x="200" y="490" width="150" height="34" rx="6" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1.5"/>
+        <text x="275" y="511" text-anchor="middle" fill="#065f46" font-size="12" font-family="JetBrains Mono, monospace">Timeline Extractor</text>
+        
+        <!-- Entity Linker -->
+        <rect x="370" y="490" width="100" height="34" rx="6" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="1.5"/>
+        <text x="420" y="511" text-anchor="middle" fill="#6d28d9" font-size="12" font-family="JetBrains Mono, monospace">Entity Linker</text>
+        
+        <!-- Ax Adapter -->
+        <rect x="60" y="534" width="220" height="34" rx="6" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5"/>
+        <text x="170" y="555" text-anchor="middle" fill="#1e40af" font-size="12" font-family="JetBrains Mono, monospace">Ax Adapter (createAxAI)</text>
+        
+        <!-- Fallback -->
+        <rect x="300" y="534" width="150" height="34" rx="6" fill="#fef2f2" stroke="#fecaca" stroke-width="1.5"/>
+        <text x="375" y="555" text-anchor="middle" fill="#dc2626" font-size="12" font-family="JetBrains Mono, monospace">Fallback 降级</text>
+
+        <!-- ============================================================
+             LAYER 4b: 数据层 (RIGHT)
+             ============================================================ -->
+        <rect x="550" y="415" width="500" height="130" rx="12" fill="none" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="6,3"/>
+        <text x="566" y="433" fill="#64748b" font-size="11" font-weight="600" font-family="Inter, sans-serif">数据层</text>
+        
+        <!-- seekdb -->
+        <rect x="580" y="445" width="440" height="34" rx="8" fill="#dbeafe" stroke="#93c5fd" stroke-width="1.5" filter="url(#shadow-sm)"/>
+        <text x="800" y="466" text-anchor="middle" fill="#1e40af" font-size="13" font-weight="600" font-family="JetBrains Mono, monospace">seekdb (嵌入式数据库)</text>
+        
+        <!-- Tables row 1 -->
+        <rect x="590" y="488" width="180" height="28" rx="4" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
+        <text x="680" y="506" text-anchor="middle" fill="#475569" font-size="11" font-family="JetBrains Mono, monospace">pages 表</text>
+        
+        <rect x="790" y="488" width="180" height="28" rx="4" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
+        <text x="880" y="506" text-anchor="middle" fill="#475569" font-size="11" font-family="JetBrains Mono, monospace">links 表</text>
+        
+        <!-- Tables row 2 -->
+        <rect x="590" y="522" width="180" height="28" rx="4" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
+        <text x="680" y="540" text-anchor="middle" fill="#475569" font-size="11" font-family="JetBrains Mono, monospace">timeline_entries</text>
+        
+        <rect x="790" y="522" width="180" height="28" rx="4" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
+        <text x="880" y="540" text-anchor="middle" fill="#475569" font-size="11" font-family="JetBrains Mono, monospace">page_tags</text>
+        
+        <!-- Tables row 3 -->
+        <rect x="590" y="556" width="180" height="28" rx="4" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
+        <text x="680" y="574" text-anchor="middle" fill="#475569" font-size="11" font-family="JetBrains Mono, monospace">raw_data 表</text>
+        
+        <rect x="790" y="556" width="180" height="28" rx="4" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.2"/>
+        <text x="880" y="574" text-anchor="middle" fill="#475569" font-size="11" font-family="JetBrains Mono, monospace">ebrain_pages 集合</text>
+
+        <!-- Arrows L4 → L5 (AxAdapter→Hash, EntityLinker→Hash, seekdb→OpenAI) -->
+        <line x1="170" y1="568" x2="170" y2="648" stroke="#10b981" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+        <line x1="420" y1="568" x2="420" y2="648" stroke="#10b981" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+        <path d="M 800 479 L 800 590 L 640 648" fill="none" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+
+        <!-- ============================================================
+             LAYER 5: 嵌入层
+             ============================================================ -->
+        <rect x="30" y="618" width="1020" height="80" rx="12" fill="none" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="6,3"/>
+        <text x="46" y="636" fill="#64748b" font-size="11" font-weight="600" font-family="Inter, sans-serif">嵌入层 (Embedding)</text>
+        
+        <!-- Hash -->
+        <rect x="140" y="648" width="320" height="38" rx="8" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1.5" filter="url(#shadow-sm)"/>
+        <text x="300" y="672" text-anchor="middle" fill="#065f46" font-size="13" font-weight="600" font-family="JetBrains Mono, monospace">Hash (本地, 384 维)</text>
+        
+        <!-- OpenAI Compatible -->
+        <rect x="480" y="648" width="320" height="38" rx="8" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5" filter="url(#shadow-sm)"/>
+        <text x="640" y="672" text-anchor="middle" fill="#1e40af" font-size="13" font-weight="600" font-family="JetBrains Mono, monospace">OpenAI Compatible (API)</text>
+
+        <!-- ============================================================
+             LEGEND (bottom left)
+             ============================================================ -->
+        <rect x="30" y="718" width="420" height="32" rx="6" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+        <text x="44" y="739" fill="#64748b" font-size="10" font-weight="600" font-family="Inter, sans-serif">图例</text>
+        
+        <line x1="80" y1="733" x2="108" y2="733" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+        <text x="114" y="737" fill="#475569" font-size="10" font-family="Inter, sans-serif">页面管理 / 检索流</text>
+        
+        <line x1="210" y1="733" x2="238" y2="733" stroke="#10b981" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+        <text x="244" y="737" fill="#475569" font-size="10" font-family="Inter, sans-serif">编译 / 时间线 / Embedding</text>
+        
+        <line x1="380" y1="733" x2="408" y2="733" stroke="#8b5cf6" stroke-width="1.5" marker-end="url(#arrow-purple)"/>
+        <text x="414" y="737" fill="#475569" font-size="10" font-family="Inter, sans-serif">实体链接 / AI 流</text>
+
+        <!-- Design principles (bottom right) -->
+        <rect x="470" y="718" width="580" height="32" rx="6" fill="#fffbeb" stroke="#fde68a" stroke-width="1"/>
+        <text x="484" y="739" fill="#92400e" font-size="10" font-weight="600" font-family="Inter, sans-serif">设计原则</text>
+        <text x="550" y="739" fill="#713f12" font-size="10" font-family="Inter, sans-serif">零交互 · 幂等 · --dry-run · --stdin · 结构化输出 · 快速失败 · resource verb 模式</text>
+
+      </svg>
+    </div>
+
+    <!-- Info Cards -->
+    <div class="cards">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot blue"></div>
+          <h3>核心技术栈</h3>
+        </div>
+        <ul>
+          <li>seekdb 嵌入式数据库（全文 + 向量混合检索）</li>
+          <li>@ax-llm/ax 框架（Ax Signature + GEPA 优化）</li>
+          <li>@modelcontextprotocol/sdk（MCP Server）</li>
+          <li>Bun / Node.js 运行时</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot green"></div>
+          <h3>AI 能力</h3>
+        </div>
+        <ul>
+          <li>智能编译（Compiler）— 自动更新 Compiled Truth</li>
+          <li>时间线提取（Timeline Extractor）— 多格式日期解析</li>
+          <li>实体链接（Entity Linker）— 10 种关系类型识别</li>
+          <li>统一降级（Fallback）— LLM 不可用自动回退</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot purple"></div>
+          <h3>数据模型</h3>
+        </div>
+        <ul>
+          <li>pages / links / timeline_entries / page_tags</li>
+          <li>raw_data（原始来源追溯）</li>
+          <li>ingest_log（文档摄取日志）</li>
+          <li>ebrain_pages（向量 + 全文混合检索集合）</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="footer">
+      ex-brain v0.3.0 • MIT License • docs/ex-brain-architecture-light.html
+    </p>
+  </div>
+</body>
+</html>

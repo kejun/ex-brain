@@ -1,0 +1,134 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 780" width="960" height="780">
+<style>
+text { font-family: 'Helvetica Neue', Helvetica, Arial, 'PingFang SC', 'Microsoft YaHei', 'Microsoft JhengHei', 'SimHei', sans-serif; }
+</style>
+<defs>
+<marker id="ab" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#2563eb"/></marker>
+<marker id="ag" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#16a34a"/></marker>
+<marker id="ap" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#9333ea"/></marker>
+<marker id="ao" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#ea580c"/></marker>
+</defs>
+<rect width="960" height="780" fill="#ffffff"/>
+<text x="480" y="38" text-anchor="middle" fill="#111827" font-size="20" font-weight="600">ex-brain 整体架构图</text>
+<text x="480" y="56" text-anchor="middle" fill="#6b7280" font-size="12">基于 seekdb 的个人知识库 CLI — 智能编译 · 时间线 · 实体链接 · 混合搜索 · MCP</text>
+<rect x="30" y="70" width="900" height="80" rx="12" fill="none" stroke="#d1d5db" stroke-width="1.5" stroke-dasharray="6,3"/>
+<text x="44" y="86" fill="#6b7280" font-size="11" font-weight="600">用户界面层</text>
+<rect x="80" y="94" width="220" height="40" rx="8" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5"/>
+<text x="190" y="119" text-anchor="middle" fill="#1e40af" font-size="14" font-weight="600">CLI（ebrain）</text>
+<rect x="370" y="94" width="220" height="40" rx="8" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1.5"/>
+<text x="480" y="119" text-anchor="middle" fill="#166534" font-size="14" font-weight="600">MCP Server</text>
+<rect x="660" y="94" width="220" height="40" rx="8" fill="#faf5ff" stroke="#e9d5ff" stroke-width="1.5"/>
+<text x="770" y="119" text-anchor="middle" fill="#7c3aed" font-size="14" font-weight="600">Web UI（知识图谱）</text>
+<rect x="30" y="180" width="900" height="120" rx="12" fill="none" stroke="#d1d5db" stroke-width="1.5" stroke-dasharray="6,3"/>
+<text x="44" y="196" fill="#6b7280" font-size="11" font-weight="600">命令层</text>
+<rect x="50" y="204" width="110" height="34" rx="6" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+<text x="105" y="224" text-anchor="middle" fill="#111827" font-size="12">put / get</text>
+<text x="105" y="235" text-anchor="middle" fill="#9ca3af" font-size="9">页面管理</text>
+<rect x="175" y="204" width="110" height="34" rx="6" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+<text x="230" y="224" text-anchor="middle" fill="#111827" font-size="12">search</text>
+<text x="230" y="235" text-anchor="middle" fill="#9ca3af" font-size="9">混合搜索</text>
+<rect x="300" y="204" width="110" height="34" rx="6" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+<text x="355" y="224" text-anchor="middle" fill="#111827" font-size="12">query</text>
+<text x="355" y="235" text-anchor="middle" fill="#9ca3af" font-size="9">语义问答</text>
+<rect x="425" y="204" width="110" height="34" rx="6" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+<text x="480" y="224" text-anchor="middle" fill="#111827" font-size="12">compile</text>
+<text x="480" y="235" text-anchor="middle" fill="#9ca3af" font-size="9">智能编译</text>
+<rect x="550" y="204" width="110" height="34" rx="6" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+<text x="605" y="224" text-anchor="middle" fill="#111827" font-size="12">timeline</text>
+<text x="605" y="235" text-anchor="middle" fill="#9ca3af" font-size="9">时间线</text>
+<rect x="675" y="204" width="110" height="34" rx="6" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+<text x="730" y="224" text-anchor="middle" fill="#111827" font-size="12">link</text>
+<text x="730" y="235" text-anchor="middle" fill="#9ca3af" font-size="9">实体链接</text>
+<rect x="800" y="204" width="110" height="34" rx="6" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+<text x="855" y="224" text-anchor="middle" fill="#111827" font-size="12">ingest</text>
+<text x="855" y="235" text-anchor="middle" fill="#9ca3af" font-size="9">文档摄取</text>
+<rect x="50" y="250" width="150" height="34" rx="6" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+<text x="125" y="270" text-anchor="middle" fill="#111827" font-size="12">tag / list</text>
+<text x="125" y="281" text-anchor="middle" fill="#9ca3af" font-size="9">标签管理</text>
+<rect x="220" y="250" width="150" height="34" rx="6" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+<text x="295" y="270" text-anchor="middle" fill="#111827" font-size="12">graph</text>
+<text x="295" y="281" text-anchor="middle" fill="#9ca3af" font-size="9">知识图谱</text>
+<rect x="390" y="250" width="150" height="34" rx="6" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+<text x="465" y="270" text-anchor="middle" fill="#111827" font-size="12">import / export</text>
+<text x="465" y="281" text-anchor="middle" fill="#9ca3af" font-size="9">导入导出</text>
+<rect x="560" y="250" width="150" height="34" rx="6" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+<text x="635" y="270" text-anchor="middle" fill="#111827" font-size="12">serve</text>
+<text x="635" y="281" text-anchor="middle" fill="#9ca3af" font-size="9">MCP 服务</text>
+<rect x="730" y="250" width="150" height="34" rx="6" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+<text x="805" y="270" text-anchor="middle" fill="#111827" font-size="12">init / stats</text>
+<text x="805" y="281" text-anchor="middle" fill="#9ca3af" font-size="9">初始化 / 统计</text>
+<rect x="30" y="330" width="900" height="80" rx="12" fill="none" stroke="#d1d5db" stroke-width="1.5" stroke-dasharray="6,3"/>
+<text x="44" y="346" fill="#6b7280" font-size="11" font-weight="600">仓库层</text>
+<rect x="100" y="352" width="400" height="40" rx="8" fill="#fff7ed" stroke="#fed7aa" stroke-width="1.5"/>
+<text x="300" y="377" text-anchor="middle" fill="#9a3412" font-size="14" font-weight="600">BrainRepository</text>
+<rect x="540" y="352" width="150" height="40" rx="8" fill="#f0fdfa" stroke="#99f6e4" stroke-width="1.5"/>
+<text x="615" y="377" text-anchor="middle" fill="#115e59" font-size="13" font-weight="500">Config / Settings</text>
+<rect x="710" y="352" width="150" height="40" rx="8" fill="#f5f3ff" stroke="#ddd6fe" stroke-width="1.5"/>
+<text x="785" y="377" text-anchor="middle" fill="#5b21b6" font-size="13" font-weight="500">Markdown Parser</text>
+<rect x="30" y="440" width="440" height="130" rx="12" fill="none" stroke="#d1d5db" stroke-width="1.5" stroke-dasharray="6,3"/>
+<text x="44" y="456" fill="#6b7280" font-size="11" font-weight="600">AI 层</text>
+<rect x="50" y="464" width="170" height="32" rx="6" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+<text x="135" y="484" text-anchor="middle" fill="#111827" font-size="12">Ax Signature</text>
+<rect x="240" y="464" width="170" height="32" rx="6" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+<text x="325" y="484" text-anchor="middle" fill="#111827" font-size="12">AIPipeline</text>
+<rect x="50" y="508" width="120" height="32" rx="6" fill="#fff7ed" stroke="#fed7aa" stroke-width="1.5"/>
+<text x="110" y="528" text-anchor="middle" fill="#9a3412" font-size="12">Compiler</text>
+<rect x="185" y="508" width="150" height="32" rx="6" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1.5"/>
+<text x="260" y="528" text-anchor="middle" fill="#065f46" font-size="12">Timeline Extractor</text>
+<rect x="350" y="508" width="100" height="32" rx="6" fill="#ede9fe" stroke="#c4b5fd" stroke-width="1.5"/>
+<text x="400" y="528" text-anchor="middle" fill="#6d28d9" font-size="12">Entity Linker</text>
+<rect x="50" y="552" width="200" height="32" rx="6" fill="#f0f9ff" stroke="#bae6fd" stroke-width="1.5"/>
+<text x="150" y="572" text-anchor="middle" fill="#075985" font-size="12">Ax Adapter (createAxAI)</text>
+<rect x="270" y="552" width="140" height="32" rx="6" fill="#fef3c7" stroke="#fde68a" stroke-width="1.5"/>
+<text x="340" y="572" text-anchor="middle" fill="#92400e" font-size="12">Fallback 降级</text>
+<rect x="490" y="440" width="440" height="130" rx="12" fill="none" stroke="#d1d5db" stroke-width="1.5" stroke-dasharray="6,3"/>
+<text x="504" y="456" fill="#6b7280" font-size="11" font-weight="600">数据层</text>
+<rect x="510" y="464" width="400" height="40" rx="8" fill="#dbeafe" stroke="#93c5fd" stroke-width="1.5"/>
+<text x="710" y="489" text-anchor="middle" fill="#1e40af" font-size="14" font-weight="600">seekdb（嵌入式数据库）</text>
+<rect x="520" y="516" width="160" height="26" rx="4" fill="#ffffff" stroke="#d1d5db" stroke-width="1.2"/>
+<text x="600" y="533" text-anchor="middle" fill="#374151" font-size="11">pages 表</text>
+<rect x="695" y="516" width="160" height="26" rx="4" fill="#ffffff" stroke="#d1d5db" stroke-width="1.2"/>
+<text x="775" y="533" text-anchor="middle" fill="#374151" font-size="11">links 表</text>
+<rect x="520" y="548" width="160" height="26" rx="4" fill="#ffffff" stroke="#d1d5db" stroke-width="1.2"/>
+<text x="600" y="565" text-anchor="middle" fill="#374151" font-size="11">timeline_entries</text>
+<rect x="695" y="548" width="160" height="26" rx="4" fill="#ffffff" stroke="#d1d5db" stroke-width="1.2"/>
+<text x="775" y="565" text-anchor="middle" fill="#374151" font-size="11">page_tags</text>
+<rect x="520" y="580" width="160" height="26" rx="4" fill="#ffffff" stroke="#d1d5db" stroke-width="1.2"/>
+<text x="600" y="597" text-anchor="middle" fill="#374151" font-size="11">raw_data 表</text>
+<rect x="695" y="580" width="160" height="26" rx="4" fill="#ffffff" stroke="#d1d5db" stroke-width="1.2"/>
+<text x="775" y="597" text-anchor="middle" fill="#374151" font-size="11">ebrain_pages 集合</text>
+<rect x="520" y="612" width="160" height="26" rx="4" fill="#f0fdf4" stroke="#86efac" stroke-width="1.2"/>
+<text x="600" y="629" text-anchor="middle" fill="#166534" font-size="11">向量索引 (KNN)</text>
+<rect x="695" y="612" width="160" height="26" rx="4" fill="#fef3c7" stroke="#fde68a" stroke-width="1.2"/>
+<text x="775" y="629" text-anchor="middle" fill="#92400e" font-size="11">全文索引</text>
+<rect x="30" y="595" width="900" height="80" rx="12" fill="none" stroke="#d1d5db" stroke-width="1.5" stroke-dasharray="6,3"/>
+<text x="44" y="611" fill="#6b7280" font-size="11" font-weight="600">嵌入层（Embedding）</text>
+<rect x="120" y="619" width="300" height="40" rx="8" fill="#f0fdf4" stroke="#86efac" stroke-width="1.5"/>
+<text x="270" y="644" text-anchor="middle" fill="#166534" font-size="14" font-weight="600">Hash（本地，384 维）</text>
+<rect x="460" y="619" width="300" height="40" rx="8" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.5"/>
+<text x="610" y="644" text-anchor="middle" fill="#1e40af" font-size="14" font-weight="600">OpenAI Compatible（API）</text>
+<line x1="190" y1="150" x2="190" y2="180" stroke="#2563eb" stroke-width="1.5" marker-end="url(#ab)"/>
+<line x1="480" y1="150" x2="480" y2="180" stroke="#16a34a" stroke-width="1.5" marker-end="url(#ag)"/>
+<line x1="770" y1="150" x2="770" y2="180" stroke="#9333ea" stroke-width="1.5" marker-end="url(#ap)"/>
+<line x1="190" y1="300" x2="190" y2="330" stroke="#2563eb" stroke-width="1.5" marker-end="url(#ab)"/>
+<path d="M 480,300 L 300,330" stroke="#16a34a" stroke-width="1.5" marker-end="url(#ag)"/>
+<line x1="760" y1="300" x2="620" y2="330" stroke="#ea580c" stroke-width="1.5" marker-end="url(#ao)"/>
+<line x1="250" y1="410" x2="200" y2="440" stroke="#9333ea" stroke-width="1.5" marker-end="url(#ap)"/>
+<line x1="550" y1="410" x2="700" y2="440" stroke="#2563eb" stroke-width="1.5" marker-end="url(#ab)"/>
+<line x1="160" y1="570" x2="270" y2="595" stroke="#16a34a" stroke-width="1.5" marker-end="url(#ag)"/>
+<line x1="700" y1="570" x2="610" y2="595" stroke="#2563eb" stroke-width="1.5" marker-end="url(#ab)"/>
+<rect x="30" y="695" width="420" height="70" rx="8" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1"/>
+<text x="42" y="711" fill="#111827" font-size="11" font-weight="600">图例</text>
+<line x1="44" y1="727" x2="74" y2="727" stroke="#2563eb" stroke-width="1.5" marker-end="url(#ab)"/>
+<text x="80" y="731" fill="#374151" font-size="11">页面管理 / 检索流</text>
+<line x1="44" y1="741" x2="74" y2="741" stroke="#16a34a" stroke-width="1.5" marker-end="url(#ag)"/>
+<text x="80" y="745" fill="#374151" font-size="11">智能编译 / 时间线 / Embedding 流</text>
+<line x1="44" y1="755" x2="74" y2="755" stroke="#9333ea" stroke-width="1.5" marker-end="url(#ap)"/>
+<text x="80" y="759" fill="#374151" font-size="11">实体链接 / AI 调用流</text>
+<line x1="44" y1="769" x2="74" y2="769" stroke="#ea580c" stroke-width="1.5" marker-end="url(#ao)"/>
+<text x="80" y="773" fill="#374151" font-size="11">文档摄取流</text>
+<rect x="500" y="695" width="430" height="70" rx="8" fill="#fefce8" stroke="#fde68a" stroke-width="1"/>
+<text x="512" y="711" fill="#854d0e" font-size="11" font-weight="600">设计原则</text>
+<text x="512" y="729" fill="#713f12" font-size="11">零交互 · 幂等 · --dry-run · --stdin · 结构化输出 · 快速失败</text>
+<text x="512" y="745" fill="#713f12" font-size="11">命令遵循 resource verb 模式（如 timeline list / tag add）</text>
+</svg>
