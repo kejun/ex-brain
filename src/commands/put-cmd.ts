@@ -498,10 +498,12 @@ Examples:
     )
     .action(async (opts: Record<string, string | undefined>) => {
       await withRepo(program, async (repo) => {
+        const rawLimit = Number(opts.limit ?? 50);
+        const limit = (Number.isFinite(rawLimit) && rawLimit > 0) ? rawLimit : 50;
         const rows = await repo.listPages({
           type: opts.type,
           tag: opts.tag,
-          limit: Number(opts.limit),
+          limit,
         });
 
         // When --fields is set, show one page per line with tab-separated values
@@ -516,9 +518,16 @@ Examples:
             });
             console.log(vals.join("\t"));
           }
+          // Show count for tabular output too
+          if (!isJson(program) && rows.length >= limit) {
+            process.stderr.write(`\nShowing ${rows.length} page(s) (use --limit to show more)\n`);
+          }
           return;
         }
 
+        if (!isJson(program) && rows.length >= limit) {
+          process.stderr.write(`Showing ${rows.length} page(s) (use --limit to show more)\n`);
+        }
         print(program, rows);
       });
     });

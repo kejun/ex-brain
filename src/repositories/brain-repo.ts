@@ -125,7 +125,11 @@ export class BrainRepository {
     limit?: number;
   }): Promise<PageRecord[]> {
     try {
-      const limit = filters.limit ?? 50;
+      // Safe default: use 50 if limit is missing, NaN, non-finite, or <= 0
+      const rawLimit = filters.limit;
+      const limit = (typeof rawLimit === 'number' && Number.isFinite(rawLimit) && rawLimit > 0)
+        ? rawLimit
+        : 50;
       const params: unknown[] = [];
       let sql = `SELECT p.slug, p.type, p.title, p.compiled_truth, p.timeline, p.frontmatter, p.created_at, p.updated_at
                  FROM pages p`;

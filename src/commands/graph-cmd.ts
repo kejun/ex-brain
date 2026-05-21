@@ -11,6 +11,20 @@ interface GraphNode {
   group: string;
 }
 
+/**
+ * Normalize a type value.  Slug-like values (no `/` in the original slug,
+ * contain `_`, or start with digits) are mapped to "article" so the filter
+ * panel doesn't list every individual document as its own type.
+ */
+function normalizeType(rawType: string, slug: string): string {
+  // If the raw type equals the slug's basename, it was inferred from a flat slug
+  const baseName = slug.includes("/") ? slug.split("/").pop()! : slug;
+  if (rawType === baseName || /^\d/.test(rawType) || rawType.startsWith("rm_")) {
+    return "article";
+  }
+  return rawType;
+}
+
 interface GraphEdge {
   from: string;
   to: string;
@@ -43,7 +57,8 @@ async function getGraphData(repo: BrainRepository): Promise<GraphData> {
   
   // Create nodes from pages
   for (const page of pages) {
-    const type = page.type || "other";
+    const rawType = page.type || "other";
+    const type = normalizeType(rawType, page.slug);
     typeCounts[type] = (typeCounts[type] || 0) + 1;
     
     nodes.push({
@@ -693,6 +708,10 @@ function getGraphHtml(): string {
         const response = await fetch('/api/graph');
         graphData = await response.json();
         
+        // Precompute node type map for O(1) edge visibility check
+        nodeTypeMap = new Map();
+        graphData.nodes.forEach(n => nodeTypeMap.set(n.id, n.type));
+        
         updateStats();
         renderFilters();
         renderNodeList();
@@ -837,22 +856,29 @@ function getGraphHtml(): string {
       });
     }
 
+    // Node type lookup for O(1) edge visibility check
+    let nodeTypeMap = new Map();
+
     function updateNetworkVisibility() {
       if (!nodes) return;
       
-      graphData.nodes.forEach(node => {
-        const visible = activeTypes.has(node.type);
-        nodes.update({ id: node.id, hidden: !visible });
-      });
+      // Batch update nodes
+      const nodeUpdates = graphData.nodes.map(node => ({
+        id: node.id,
+        hidden: !activeTypes.has(node.type),
+      }));
+      nodes.update(nodeUpdates);
       
-      // Also hide edges connected to hidden nodes
-      graphData.edges.forEach(edge => {
-        const fromNode = graphData.nodes.find(n => n.id === edge.from);
-        const toNode = graphData.nodes.find(n => n.id === edge.to);
-        const visible = fromNode && toNode && 
-          activeTypes.has(fromNode.type) && activeTypes.has(toNode.type);
-        edges.update({ id: edge.from + '->' + edge.to, hidden: !visible });
+      // Batch update edges with O(1) lookup
+      const edgeUpdates = graphData.edges.map(edge => {
+        const fromType = nodeTypeMap.get(edge.from);
+        const toType = nodeTypeMap.get(edge.to);
+        return {
+          id: edge.from + '->' + edge.to,
+          hidden: !activeTypes.has(fromType) || !activeTypes.has(toType),
+        };
       });
+      edges.update(edgeUpdates);
     }
 
     async function selectNode(slug) {

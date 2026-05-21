@@ -17,8 +17,19 @@ export function slugToTitle(slug: string): string {
     .join(" ");
 }
 
+/**
+ * Infer page type from slug path.
+ * - Slugs with a path prefix (e.g. "notes/my-post") → use the prefix as type
+ * - Flat slugs without "/" (e.g. "26_05_20_xxx" or "rm_hui_yi_ji_yao_0325") → default to "article"
+ * - Fallback to "other" if empty
+ */
 export function inferTypeFromSlug(slug: string): string {
-  return slug.split("/")[0] ?? "other";
+  const segments = slug.split("/");
+  if (segments.length > 1 && segments[0]) {
+    return segments[0];
+  }
+  // Flat slug — treat as a generic article/note
+  return "article";
 }
 
 /**
