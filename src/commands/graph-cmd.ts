@@ -606,8 +606,10 @@ function getGraphHtml(): string {
   <script type="module">
     import ForceGraph3D from 'https://esm.sh/3d-force-graph@1.80.0';
     import SpriteText from 'https://esm.sh/three-spritetext@1.10.0';
+    import * as smd from 'https://esm.sh/streaming-markdown@0.0.9';
     window.ForceGraph3D = ForceGraph3D;
     window.SpriteText = SpriteText;
+    window.SMD = smd;
     window.dispatchEvent(new Event('graph-deps-ready'));
   </script>
   <style>
@@ -1202,6 +1204,42 @@ function getGraphHtml(): string {
       padding: 0;
     }
     
+    /* Streaming Markdown styles */
+    .stream-md h1, .stream-md h2, .stream-md h3,
+    .stream-md h4, .stream-md h5, .stream-md h6 {
+      margin: 0.8em 0 0.4em 0;
+      color: #e0e0e0;
+    }
+    .stream-md p { margin: 0.4em 0; }
+    .stream-md ul, .stream-md ol { margin: 0.4em 0; padding-left: 1.5em; }
+    .stream-md code {
+      background: #2a2a2a;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.9em;
+    }
+    .stream-md pre {
+      background: #1a1a1a;
+      padding: 12px;
+      border-radius: 8px;
+      overflow-x: auto;
+    }
+    .stream-md pre code {
+      background: none;
+      padding: 0;
+    }
+    .stream-md blockquote {
+      border-left: 3px solid #4a9eff;
+      padding-left: 12px;
+      margin: 0.5em 0;
+      color: #aaa;
+    }
+    .stream-md a { color: #4a9eff; text-decoration: none; }
+    .stream-md a:hover { text-decoration: underline; }
+    .stream-md hr { border: none; border-top: 1px solid #333; margin: 1em 0; }
+    .stream-md table { width: 100%; border-collapse: collapse; margin: 0.5em 0; }
+    .stream-md th, .stream-md td { border: 1px solid #333; padding: 6px 10px; text-align: left; }
+    
     /* Type colors */
     .type-person { background: #4caf50; }
     .type-company { background: #2196f3; }
@@ -1755,19 +1793,39 @@ function getGraphHtml(): string {
         var reader = response.body.getReader();
         var decoder = new TextDecoder();
         var buffer = '';
-        var answer = '';
         var sources = [];
+        var answer = ''; // Fallback for streaming-md unavailable
+        var smParser = null;
+        var smRenderer = null;
+        var answerContainer = null;
+        var sourcesContainer = null;
+
+        function buildSourcesHtml() {
+          return '<div class="sources"><h3>Sources (' + sources.length + ')</h3>' +
+            sources.map(function(s) {
+              return '<span class="source-item" data-slug="' + escapeHtml(s.slug) + '">' + escapeHtml(s.title) + '</span>';
+            }).join('') + '</div>';
+        }
+
+        function initStreamingMd() {
+          if (smRenderer || typeof window.SMD === 'undefined') return;
+          var renderer = window.SMD.default_renderer(answerContainer);
+          smRenderer = renderer;
+          smParser = window.SMD.parser(renderer);
+        }
 
         function read() {
           return reader.read().then(function(result) {
             if (result.done) {
-              // Stream ended - finalize with whatever we have
+              // Stream ended - finalize
               try {
-                if (answer.length > 0) {
-                  var finalHtml = '<div class="sources"><h3>Sources (' + sources.length + ')</h3>' +
-                    sources.map(function(s) {
-                      return '<span class="source-item" data-slug="' + escapeHtml(s.slug) + '">' + escapeHtml(s.title) + '</span>';
-                    }).join('') + '</div>' +
+                if (smParser) smParser.end();
+                if (answerContainer && sourcesContainer) {
+                  sourcesContainer.innerHTML = buildSourcesHtml();
+                  bindSourceClicks();
+                } else if (answer.length > 0) {
+                  // Fallback if streaming-md not available
+                  var finalHtml = buildSourcesHtml() +
                     '<div class="answer markdown-content">' + parseMarkdown(answer) + '</div>';
                   askResult.innerHTML = finalHtml;
                   bindSourceClicks();
@@ -1776,7 +1834,6 @@ function getGraphHtml(): string {
                 }
               } catch (finalizeErr) {
                 console.error('Finalize error:', finalizeErr);
-                askResult.innerHTML = '<div class="answer markdown-content">' + escapeHtml(answer) + '</div>';
               }
               isStreaming = false;
               askSubmit.disabled = false;
@@ -1798,33 +1855,30 @@ function getGraphHtml(): string {
                 var data = JSON.parse(line.slice(6));
                 if (data.type === 'sources') {
                   sources = data.sources || [];
-                  askResult.innerHTML = '<div class="sources"><h3>Sources (' + sources.length + ')</h3>' +
-                    sources.map(function(s) {
-                      return '<span class="source-item" data-slug="' + escapeHtml(s.slug) + '">' + escapeHtml(s.title) + '</span>';
-                    }).join('') + '</div>' +
-                    '<div class="answer markdown-content">Loading answer...</div>';
+                  askResult.innerHTML = buildSourcesHtml() +
+                    '<div class="answer stream-md" id="stream-answer">Loading answer...</div>';
+                  sourcesContainer = askResult.querySelector('.sources');
+                  answerContainer = document.getElementById('stream-answer');
+                  initStreamingMd();
                   bindSourceClicks();
                 } else if (data.type === 'delta') {
-                  answer += data.content;
-                  var answerEl = askResult.querySelector('.answer');
-                  if (answerEl) answerEl.textContent = answer;
+                  if (smParser) {
+                    smParser.write(data.content);
+                  } else {
+                    answer += data.content;
+                    var answerEl = askResult.querySelector('.answer');
+                    if (answerEl) answerEl.textContent = answer;
+                  }
                 } else if (data.type === 'done') {
-                  // Finalize - wrap in try-catch to prevent parseMarkdown errors from breaking finalization
+                  // Finalize
                   try {
-                    if (answer.length > 0) {
-                      var finalHtml = '<div class="sources"><h3>Sources (' + sources.length + ')</h3>' +
-                        sources.map(function(s) {
-                          return '<span class="source-item" data-slug="' + escapeHtml(s.slug) + '">' + escapeHtml(s.title) + '</span>';
-                        }).join('') + '</div>' +
-                        '<div class="answer markdown-content">' + parseMarkdown(answer) + '</div>';
-                      askResult.innerHTML = finalHtml;
+                    if (smParser) smParser.end();
+                    if (sourcesContainer) {
+                      sourcesContainer.innerHTML = buildSourcesHtml();
                       bindSourceClicks();
                     }
                   } catch (finalizeErr) {
                     console.error('Finalize error:', finalizeErr);
-                    // Fallback: show raw text if markdown parsing fails
-                    var answerEl = askResult.querySelector('.answer');
-                    if (answerEl) answerEl.textContent = answer;
                   }
                   isStreaming = false;
                   askSubmit.disabled = false;
@@ -1846,15 +1900,20 @@ function getGraphHtml(): string {
             // Handle stream read errors
             if (err.name === 'AbortError') return;
             console.error('Stream read error:', err);
-            if (answer.length > 0) {
-              var finalHtml = '<div class="sources"><h3>Sources (' + sources.length + ')</h3>' +
-                sources.map(function(s) {
-                  return '<span class="source-item" data-slug="' + escapeHtml(s.slug) + '">' + escapeHtml(s.title) + '</span>';
-                }).join('') + '</div>' +
-                '<div class="answer markdown-content">' + parseMarkdown(answer) + '</div>';
-              askResult.innerHTML = finalHtml;
-              bindSourceClicks();
-            } else {
+            try {
+              if (smParser) smParser.end();
+              if (sourcesContainer) {
+                sourcesContainer.innerHTML = buildSourcesHtml();
+                bindSourceClicks();
+              } else if (answer.length > 0) {
+                var finalHtml = buildSourcesHtml() +
+                  '<div class="answer markdown-content">' + parseMarkdown(answer) + '</div>';
+                askResult.innerHTML = finalHtml;
+                bindSourceClicks();
+              } else {
+                askResult.innerHTML = '<div class="error">Connection error: ' + escapeHtml(String(err)) + '</div>';
+              }
+            } catch (e) {
               askResult.innerHTML = '<div class="error">Connection error: ' + escapeHtml(String(err)) + '</div>';
             }
             isStreaming = false;
