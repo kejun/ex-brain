@@ -1438,27 +1438,10 @@ function getGraphHtml(): string {
         .nodeId('id')
         .backgroundColor('#000000')
         .showNavInfo(false)
-        .warmupTicks(150)
-        .cooldownTime(3000)
+        .warmupTicks(120)
+        .cooldownTime(2000)
         .nodeVal('val')
-        .d3AlphaDecay(0.02)
-        .d3VelocityDecay(0.3)
-        .d3Force('link', function(force) {
-          if (!force) return;
-          force.distance(30).strength(1.2);
-        })
-        .d3Force('charge', function(force) {
-          if (!force) return;
-          force.strength(-60).distanceMax(120);
-        })
-        .d3Force('center', function(force) {
-          if (!force) return;
-          force.strength(0.08);
-        })
-        .d3Force('collision', function(force) {
-          if (!force) return;
-          force.radius(function(n) { return n.val || 5; });
-        })
+        .linkDistance(40)
         .nodeColor(function(n) {
           if (n === selectedNode3D) return '#ffffff';
           return highlightNodes.has(n) ? '#ffcc44' : n.color;
@@ -1503,6 +1486,20 @@ function getGraphHtml(): string {
           refreshGraph();
         })
         .enableNavigationControls(true);
+
+      // Tweak d3-force parameters AFTER graph creation (can't chain in constructor)
+      var chargeForce = Graph.d3Force('charge');
+      if (chargeForce) {
+        chargeForce.strength(-80).distanceMax(200);
+      }
+      var linkForce = Graph.d3Force('link');
+      if (linkForce) {
+        linkForce.distance(50).strength(0.8);
+      }
+      var centerForce = Graph.d3Force('center');
+      if (centerForce) {
+        centerForce.strength(0.05);
+      }
 
       // Auto-rotate
       // Controls are created asynchronously by three-render-objects.
