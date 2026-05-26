@@ -1487,20 +1487,6 @@ function getGraphHtml(): string {
         })
         .enableNavigationControls(true);
 
-      // Tweak d3-force parameters AFTER graph creation (can't chain in constructor)
-      var chargeForce = Graph.d3Force('charge');
-      if (chargeForce) {
-        chargeForce.strength(-80).distanceMax(200);
-      }
-      var linkForce = Graph.d3Force('link');
-      if (linkForce) {
-        linkForce.distance(50).strength(0.8);
-      }
-      var centerForce = Graph.d3Force('center');
-      if (centerForce) {
-        centerForce.strength(0.05);
-      }
-
       // Auto-rotate
       // Controls are created asynchronously by three-render-objects.
       // Wait a tick to ensure they are attached before configuring.
