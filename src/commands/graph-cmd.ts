@@ -603,18 +603,13 @@ function getGraphHtml(): string {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Ex-Brain Knowledge Graph</title>
-  <script type="importmap">
-  {
-    "imports": {
-      "three-spritetext": "https://esm.sh/three-spritetext"
-    }
-  }
-  </script>
   <script type="module">
-    import SpriteText from "three-spritetext";
+    import ForceGraph3D from 'https://esm.sh/3d-force-graph@1.80.0';
+    import SpriteText from 'https://esm.sh/three-spritetext@1.10.0';
+    window.ForceGraph3D = ForceGraph3D;
     window.SpriteText = SpriteText;
+    window.dispatchEvent(new Event('graph-deps-ready'));
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/3d-force-graph"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     
@@ -1006,6 +1001,50 @@ function getGraphHtml(): string {
       background: #333;
     }
     
+    /* Toggle Switch */
+    .toolbar-switch {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 8px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .switch-label {
+      font-size: 13px;
+      color: #e0e0e0;
+    }
+    .toolbar-switch input {
+      display: none;
+    }
+    .slider {
+      width: 36px;
+      height: 20px;
+      background: #333;
+      border-radius: 10px;
+      position: relative;
+      transition: background 0.2s;
+      border: 1px solid #555;
+    }
+    .slider::before {
+      content: '';
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      background: #e0e0e0;
+      border-radius: 50%;
+      top: 2px;
+      left: 2px;
+      transition: transform 0.2s;
+    }
+    .toolbar-switch input:checked + .slider {
+      background: #4a9eff;
+      border-color: #4a9eff;
+    }
+    .toolbar-switch input:checked + .slider::before {
+      transform: translateX(16px);
+    }
+    
     /* Q&A Button - highlighted */
     #btn-ask {
       background: #4a9eff;
@@ -1266,6 +1305,11 @@ function getGraphHtml(): string {
       <div id="toolbar">
         <button class="toolbar-btn" id="btn-fit">Fit View</button>
         <button class="toolbar-btn" id="btn-reset">Reset Filters</button>
+        <label class="toolbar-switch">
+          <span class="switch-label">Labels</span>
+          <input type="checkbox" id="toggle-labels" checked>
+          <span class="slider"></span>
+        </label>
         <button class="toolbar-btn" id="btn-ask"> Ask</button>
       </div>
       <div id="ask-panel">
@@ -1285,6 +1329,7 @@ function getGraphHtml(): string {
   <script>
     
     // ── Config ──
+    var labelsVisible = true;
     const typeColors = {
       person: '#4caf50', company: '#2196f3', project: '#ff9800',
       note: '#9c27b0', deal: '#f44336', yc: '#ff5722',
@@ -1414,10 +1459,8 @@ function getGraphHtml(): string {
 
     function refreshGraph() {
       if (!Graph) return;
-      // Force full re-render so visibility/color/link functions are re-evaluated
-      // with the updated activeTypes set. Re-setting with the same value does NOT
-      // trigger a re-render; graphData() is the reliable way.
-      Graph.graphData(Graph.graphData());
+      // Re-render without restarting the simulation
+      Graph.refresh();
     }
 
     // ── 3D Graph ──
@@ -1435,30 +1478,39 @@ function getGraphHtml(): string {
       var container = document.getElementById('graph-3d');
       Graph = new ForceGraph3D(container, { controlType: 'orbit' })
         .graphData({ nodes: graphData.nodes, links: graphData._links })
-        .nodeId('id')
         .backgroundColor('#000000')
         .showNavInfo(false)
-        .warmupTicks(120)
-        .cooldownTime(2000)
+        .warmupTicks(300)
+        .cooldownTicks(100)
+        .cooldownTime(1500)
+        .d3AlphaDecay(0.05)
+        .d3VelocityDecay(0.6)
         .nodeVal('val')
-        .linkDistance(40)
         .nodeColor(function(n) {
           if (n === selectedNode3D) return '#ffffff';
           return highlightNodes.has(n) ? '#ffcc44' : n.color;
         })
         .nodeThreeObject(function(n) {
-          var sprite = new SpriteText(n.label || n.id);
-          sprite.material.depthWrite = false;
-          sprite.color = n.color || '#fff';
-          sprite.textHeight = n === selectedNode3D ? 12 : 8;
-          sprite.center.y = -0.6;
-          return sprite;
+          if (!labelsVisible) return null;
+          var text = (n.label || n.id || '').toString();
+          if (!text) return null;
+          try {
+            var sprite = new SpriteText(text);
+            sprite.material.depthWrite = false;
+            sprite.color = n.color || '#fff';
+            sprite.textHeight = n === selectedNode3D ? 12 : 8;
+            sprite.center.y = -0.6;
+            return sprite;
+          } catch(e) {
+            console.warn('SpriteText error for node', n.id, e);
+            return null;
+          }
         })
         .nodeThreeObjectExtend(true)
         .nodeLabel(function(n) { return n.label + '  (' + n.id + ')'; })
         .linkColor(function(l) { return '#777'; })
         .linkWidth(function(l) { return highlightLinks.has(l) ? 1.8 : 0.8; })
-        .linkOpacity(1)
+        .linkOpacity(0.3)
         .linkMaterial(null)
         .linkDirectionalArrowLength(0)
         .nodeVisibility(function(n) { return activeTypes.has(n.type); })
@@ -1486,6 +1538,15 @@ function getGraphHtml(): string {
           refreshGraph();
         })
         .enableNavigationControls(true);
+
+      // Optimize 3D layout: compact nodes with stronger attraction & weaker repulsion
+      // Note: d3Force() returns the d3-force object, not the Graph instance, so we call them separately
+      var linkForce = Graph.d3Force('link');
+      if (linkForce) linkForce.distance(30).strength(0.8);
+      var chargeForce = Graph.d3Force('charge');
+      if (chargeForce) chargeForce.strength(-120);
+      var centerForce = Graph.d3Force('center');
+      if (centerForce) centerForce.strength(0.08);
 
       // Auto-rotate
       // Controls are created asynchronously by three-render-objects.
@@ -1621,6 +1682,28 @@ function getGraphHtml(): string {
     document.getElementById('btn-fit').addEventListener('click', function() {
       if (Graph) Graph.zoomToFit(600, 60, function(n) { return activeTypes.has(n.type); });
     });
+
+    // Toggle labels visibility via switch
+    document.getElementById('toggle-labels').addEventListener('change', function() {
+      labelsVisible = this.checked;
+      Graph.nodeThreeObject(function(n) {
+        if (!labelsVisible) return null;
+        var text = (n.label || n.id || '').toString();
+        if (!text) return null;
+        try {
+          var sprite = new SpriteText(text);
+          sprite.material.depthWrite = false;
+          sprite.color = n.color || '#fff';
+          sprite.textHeight = n === selectedNode3D ? 12 : 8;
+          sprite.center.y = -0.6;
+          return sprite;
+        } catch(e) {
+          return null;
+        }
+      });
+      Graph.refresh();
+    });
+
     document.getElementById('btn-reset').addEventListener('click', function() {
       document.querySelectorAll('#filters input').forEach(function(inp) {
         inp.checked = true; activeTypes.add(inp.dataset.type);
@@ -1907,17 +1990,8 @@ function getGraphHtml(): string {
       }
     });
 
-    // Wait for the <script type="module"> to finish importing SpriteText,
-    // then start init. This prevents a race where create3DGraph() runs
-    // before window.SpriteText is set (the module fetch is async/deferred).
-    function startWhenReady() {
-      if (typeof window.SpriteText !== 'undefined') {
-        init();
-      } else {
-        setTimeout(startWhenReady, 50);
-      }
-    }
-    startWhenReady();
+    // Wait for ES module dependencies to load
+    window.addEventListener('graph-deps-ready', function() { init(); });
   </script>
 </body>
 </html>`;
