@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ex-brain · C4 Level 3 — Component</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root,[data-theme="dark"]{--bg:#020617;--grid:#1e293b;--text:#ffffff;--text-muted:#94a3b8;--text-dim:#475569;--panel:rgba(15,23,42,0.5);--panel-border:#1e293b;--lane-fill:rgba(15,23,42,0.22);--lane-stroke:#334155;--arrow:#64748b;--arrow-emphasis:#34d399;--mask:#0f172a;--frontend-fill:rgba(8,51,68,0.4);--frontend-stroke:#22d3ee;--backend-fill:rgba(6,78,59,0.4);--backend-stroke:#34d399;--database-fill:rgba(76,29,149,0.4);--database-stroke:#a78bfa;--cloud-fill:rgba(120,53,15,0.3);--cloud-stroke:#fbbf24;--security-fill:rgba(136,19,55,0.4);--security-stroke:#fb7185;--messagebus-fill:rgba(251,146,60,0.3);--messagebus-stroke:#fb923c;--external-fill:rgba(30,41,59,0.5);--external-stroke:#94a3b8;--toolbar-bg:rgba(15,23,42,0.8);--toolbar-border:#334155;--toolbar-text:#e2e8f0;--toolbar-hover:rgba(15,23,42,0.95);--toolbar-menu-bg:#0f172a}[data-theme="light"]{--bg:#f8fafc;--grid:#e2e8f0;--text:#0f172a;--text-muted:#64748b;--text-dim:#94a3b8;--panel:#ffffff;--panel-border:#e2e8f0;--lane-fill:rgba(248,250,252,0.65);--lane-stroke:#cbd5e1;--arrow:#94a3b8;--arrow-emphasis:#059669;--mask:#ffffff;--frontend-fill:rgba(34,211,238,0.15);--frontend-stroke:#0891b2;--backend-fill:rgba(52,211,153,0.18);--backend-stroke:#059669;--database-fill:rgba(167,139,250,0.2);--database-stroke:#7c3aed;--cloud-fill:rgba(251,191,36,0.18);--cloud-stroke:#d97706;--security-fill:rgba(251,113,133,0.15);--security-stroke:#e11d48;--messagebus-fill:rgba(251,146,60,0.15);--messagebus-stroke:#ea580c;--external-fill:rgba(148,163,184,0.18);--external-stroke:#64748b;--toolbar-bg:rgba(255,255,255,0.92);--toolbar-border:#cbd5e1;--toolbar-text:#334155;--toolbar-hover:#ffffff;--toolbar-menu-bg:#ffffff}
+    *{margin:0;padding:0;box-sizing:border-box}body{font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--bg);min-height:100vh;padding:2rem;color:var(--text);transition:background .2s ease,color .2s ease}.container{max-width:1200px;margin:0 auto}.header{margin-bottom:2rem}.header-row{display:flex;align-items:center;gap:1rem;margin-bottom:.5rem}.pulse-dot{width:12px;height:12px;background:var(--frontend-stroke);border-radius:50%;animation:pulse 2s infinite}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}h1{font-size:1.5rem;font-weight:700;letter-spacing:-.025em}.subtitle{color:var(--text-muted);font-size:.875rem;margin-left:1.75rem}.diagram-container{background:var(--panel);border-radius:1rem;border:1px solid var(--panel-border);padding:1.5rem;overflow-x:auto}svg{width:100%;min-width:min(900px,100%);display:block}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;margin-top:2rem}.card{background:var(--panel);border-radius:.75rem;border:1px solid var(--panel-border);padding:1.25rem}.card-header{display:flex;align-items:center;gap:.5rem;margin-bottom:.75rem}.card-dot{width:8px;height:8px;border-radius:50%}.card-dot.cyan{background:var(--frontend-stroke)}.card-dot.emerald{background:var(--backend-stroke)}.card-dot.violet{background:var(--database-stroke)}.card-dot.amber{background:var(--cloud-stroke)}.card-dot.rose{background:var(--security-stroke)}.card-dot.orange{background:var(--messagebus-stroke)}.card-dot.slate{background:var(--external-stroke)}.card h3{font-size:.875rem;font-weight:600;color:var(--text)}.card ul{list-style:none;color:var(--text-muted);font-size:.75rem}.card li{margin-bottom:.375rem}.footer{text-align:center;margin-top:1.5rem;color:var(--text-dim);font-size:.75rem}.toolbar{position:fixed;top:1rem;right:1rem;display:flex;gap:.5rem;z-index:100}.toolbar button{background:var(--toolbar-bg);color:var(--toolbar-text);border:1px solid var(--toolbar-border);padding:.5rem .875rem;border-radius:.5rem;font-family:inherit;font-size:.75rem;font-weight:500;cursor:pointer;backdrop-filter:blur(8px);transition:background .15s,border-color .15s;display:inline-flex;align-items:center;gap:.375rem}.toolbar button:hover{background:var(--toolbar-hover);border-color:var(--arrow)}.toolbar .export-wrap{position:relative}.toolbar .export-menu{position:absolute;top:calc(100% + .375rem);right:0;background:var(--toolbar-menu-bg);border:1px solid var(--toolbar-border);border-radius:.5rem;padding:.375rem;min-width:160px;display:none;flex-direction:column;box-shadow:0 4px 20px rgba(0,0,0,.25)}.toolbar .export-menu.open{display:flex}.toolbar .export-menu button{background:transparent;border:0;justify-content:space-between;width:100%;text-align:left;padding:.5rem .75rem}.toolbar .export-menu button:hover{background:var(--toolbar-hover)}.toolbar .export-menu .hint{color:var(--text-dim);font-size:.625rem}.toolbar .export-menu hr{border:0;border-top:1px solid var(--toolbar-border);margin:.25rem .375rem;opacity:.5}.archify-toast{position:fixed;top:1rem;left:50%;transform:translateX(-50%) translateY(-8px);background:var(--toolbar-menu-bg);color:var(--text);border:1px solid var(--toolbar-border);padding:.5rem 1rem;border-radius:.5rem;font-family:inherit;font-size:.75rem;opacity:0;transition:opacity .2s,transform .2s;z-index:200;pointer-events:none;box-shadow:0 4px 20px rgba(0,0,0,.25)}.archify-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}@media(max-width:720px){body{padding:1rem}.toolbar{position:static;justify-content:flex-end;margin-bottom:1rem}.header{margin-bottom:1.25rem}.header-row{gap:.75rem;align-items:flex-start}h1{font-size:1.25rem;line-height:1.25}.subtitle{margin-left:0;font-size:.8125rem;line-height:1.55}.diagram-container{padding:.75rem;border-radius:.75rem}.cards{grid-template-columns:1fr;margin-top:1rem}}
+    .c-grid{stroke:var(--grid);fill:none}.c-mask{fill:var(--mask);stroke:none}.c-frontend{fill:var(--frontend-fill);stroke:var(--frontend-stroke)}.c-backend{fill:var(--backend-fill);stroke:var(--backend-stroke)}.c-database{fill:var(--database-fill);stroke:var(--database-stroke)}.c-cloud{fill:var(--cloud-fill);stroke:var(--cloud-stroke)}.c-security{fill:var(--security-fill);stroke:var(--security-stroke)}.c-messagebus{fill:var(--messagebus-fill);stroke:var(--messagebus-stroke)}.c-external{fill:var(--external-fill);stroke:var(--external-stroke)}.t-primary{fill:var(--text)}.t-muted{fill:var(--text-muted)}.t-dim{fill:var(--text-dim)}.t-frontend{fill:var(--frontend-stroke)}.t-backend{fill:var(--backend-stroke)}.t-database{fill:var(--database-stroke)}.t-cloud{fill:var(--cloud-stroke)}.t-security{fill:var(--security-stroke)}.t-messagebus{fill:var(--messagebus-stroke)}.t-external{fill:var(--external-stroke)}.a-default{stroke:var(--arrow);fill:none}.a-emphasis{stroke:var(--arrow-emphasis);fill:none}.a-security{stroke:var(--security-stroke);fill:none;stroke-dasharray:5,5}.a-dashed{stroke:var(--database-stroke);fill:none;stroke-dasharray:4,4}.m-default{fill:var(--arrow)}.m-emphasis{fill:var(--arrow-emphasis)}.m-security{fill:var(--security-stroke)}.m-dashed{fill:var(--database-stroke)}.c-security-group{fill:transparent;stroke:var(--security-stroke);stroke-dasharray:4,4}.c-region{fill:rgba(251,191,36,0.05);stroke:var(--cloud-stroke);stroke-dasharray:8,4}.c-lane{fill:var(--lane-fill);stroke:var(--lane-stroke);stroke-dasharray:6,6}
+  </style>
+</head>
+<body>
+  <div class="toolbar" role="toolbar" aria-label="Diagram actions">
+    <button id="btn-theme" type="button" title="Toggle theme (T)" aria-label="Toggle color theme" aria-pressed="false">
+      <span id="theme-icon" aria-hidden="true">&#9790;</span><span id="theme-label">Dark</span>
+    </button>
+    <div class="export-wrap">
+      <button id="btn-export" type="button" title="Export diagram (E)" aria-label="Export diagram" aria-haspopup="menu" aria-expanded="false" aria-controls="export-menu">
+        Export <span aria-hidden="true">&#9662;</span>
+      </button>
+      <div class="export-menu" id="export-menu" role="menu" aria-label="Export">
+        <button data-action="copy" type="button" role="menuitem" tabindex="-1">Copy to clipboard <span class="hint">PNG</span></button><hr role="separator" aria-hidden="true">
+        <button data-format="png" type="button" role="menuitem" tabindex="-1">Download PNG</button>
+        <button data-format="jpeg" type="button" role="menuitem" tabindex="-1">Download JPEG</button>
+        <button data-format="webp" type="button" role="menuitem" tabindex="-1">Download WebP</button><hr role="separator" aria-hidden="true">
+        <button data-format="svg" type="button" role="menuitem" tabindex="-1">Download SVG <span class="hint">vector</span></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>ex-brain · C4 Level 3 — Component</h1>
+      </div>
+      <p class="subtitle">BrainRepository 和 AI Engine 内部组件分解</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1000 700">
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" class="m-default"/></marker>
+          <marker id="arrowhead-emphasis" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" class="m-emphasis"/></marker>
+          <marker id="arrowhead-security" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" class="m-security"/></marker>
+          <marker id="arrowhead-dashed" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" class="m-dashed"/></marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" class="c-grid" stroke-width="0.5"/></pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#grid)"/>
+
+        <!-- ===== BrainRepository Container Boundary ===== -->
+        <rect x="30" y="30" width="460" height="340" rx="12" fill="rgba(52,211,153,0.04)" stroke="var(--backend-stroke)" stroke-dasharray="8,4" stroke-width="1.5"/>
+        <text x="42" y="52" class="t-backend" font-size="10" font-weight="700">BrainRepository (brain-repo.ts)</text>
+
+        <!-- Component: Page CRUD -->
+        <rect x="55" y="75" width="130" height="70" rx="6" class="c-mask"/>
+        <rect x="55" y="75" width="130" height="70" rx="6" class="c-backend" stroke-width="1.5"/>
+        <text x="120" y="105" class="t-primary" font-size="10" font-weight="600" text-anchor="middle">Page CRUD</text>
+        <text x="120" y="122" class="t-muted" font-size="8" text-anchor="middle">getPage / putPage</text>
+        <text x="120" y="136" class="t-dim" font-size="7" text-anchor="middle">deletePage / listPages</text>
+
+        <!-- Component: Search & Query -->
+        <rect x="210" y="75" width="130" height="70" rx="6" class="c-mask"/>
+        <rect x="210" y="75" width="130" height="70" rx="6" class="c-backend" stroke-width="1.5"/>
+        <text x="275" y="100" class="t-primary" font-size="10" font-weight="600" text-anchor="middle">Search & Query</text>
+        <text x="275" y="118" class="t-muted" font-size="8" text-anchor="middle">hybridSearch()</text>
+        <text x="275" y="132" class="t-dim" font-size="7" text-anchor="middle">全文 + 向量混合检索</text>
+
+        <!-- Component: Link Manager -->
+        <rect x="365" y="75" width="110" height="70" rx="6" class="c-mask"/>
+        <rect x="365" y="75" width="110" height="70" rx="6" class="c-backend" stroke-width="1.5"/>
+        <text x="420" y="105" class="t-primary" font-size="10" font-weight="600" text-anchor="middle">Link Manager</text>
+        <text x="420" y="122" class="t-muted" font-size="8" text-anchor="middle">link() / backlinks()</text>
+        <text x="420" y="136" class="t-dim" font-size="7" text-anchor="middle">outgoingLinks()</text>
+
+        <!-- Component: Timeline Manager -->
+        <rect x="55" y="175" width="130" height="70" rx="6" class="c-mask"/>
+        <rect x="55" y="175" width="130" height="70" rx="6" class="c-backend" stroke-width="1.5"/>
+        <text x="120" y="200" class="t-primary" font-size="10" font-weight="600" text-anchor="middle">Timeline Manager</text>
+        <text x="120" y="218" class="t-muted" font-size="8" text-anchor="middle">timelineAdd()</text>
+        <text x="120" y="232" class="t-dim" font-size="7" text-anchor="middle">timelineGlobal()</text>
+
+        <!-- Component: Tag Manager -->
+        <rect x="210" y="175" width="130" height="70" rx="6" class="c-mask"/>
+        <rect x="210" y="175" width="130" height="70" rx="6" class="c-backend" stroke-width="1.5"/>
+        <text x="275" y="200" class="t-primary" font-size="10" font-weight="600" text-anchor="middle">Tag Manager</text>
+        <text x="275" y="218" class="t-muted" font-size="8" text-anchor="middle">tagAdd() / tagRemove()</text>
+        <text x="275" y="232" class="t-dim" font-size="7" text-anchor="middle">listByTag()</text>
+
+        <!-- Component: Raw Data -->
+        <rect x="365" y="175" width="110" height="70" rx="6" class="c-mask"/>
+        <rect x="365" y="175" width="110" height="70" rx="6" class="c-database" stroke-width="1.5"/>
+        <text x="420" y="200" class="t-primary" font-size="10" font-weight="600" text-anchor="middle">Raw Data Store</text>
+        <text x="420" y="218" class="t-muted" font-size="8" text-anchor="middle">rawGet() / rawSet()</text>
+        <text x="420" y="232" class="t-dim" font-size="7" text-anchor="middle">原始摄入追溯</text>
+
+        <!-- Component: Compile Entry -->
+        <rect x="55" y="275" width="130" height="70" rx="6" class="c-mask"/>
+        <rect x="55" y="275" width="130" height="70" rx="6" class="c-cloud" stroke-width="1.5"/>
+        <text x="120" y="300" class="t-primary" font-size="10" font-weight="600" text-anchor="middle">Compile Entry</text>
+        <text x="120" y="318" class="t-muted" font-size="8" text-anchor="middle">compilePage()</text>
+        <text x="120" y="332" class="t-dim" font-size="7" text-anchor="middle">→ compileTruth()</text>
+
+        <!-- Component: Vector Sync -->
+        <rect x="210" y="275" width="130" height="70" rx="6" class="c-mask"/>
+        <rect x="210" y="275" width="130" height="70" rx="6" class="c-database" stroke-width="1.5"/>
+        <text x="275" y="300" class="t-primary" font-size="10" font-weight="600" text-anchor="middle">Vector Sync</text>
+        <text x="275" y="318" class="t-muted" font-size="8" text-anchor="middle">syncPageToSearch()</text>
+        <text x="275" y="332" class="t-dim" font-size="7" text-anchor="middle">seekdb 向量集合</text>
+
+        <!-- Component: Stats -->
+        <rect x="365" y="275" width="110" height="70" rx="6" class="c-mask"/>
+        <rect x="365" y="275" width="110" height="70" rx="6" class="c-backend" stroke-width="1.5"/>
+        <text x="420" y="300" class="t-primary" font-size="10" font-weight="600" text-anchor="middle">Stats</text>
+        <text x="420" y="318" class="t-muted" font-size="8" text-anchor="middle">getStats()</text>
+        <text x="420" y="332" class="t-dim" font-size="7" text-anchor="middle">pages/links/timeline</text>
+
+        <!-- ===== AI Engine Container Boundary ===== -->
+        <rect x="520" y="30" width="450" height="340" rx="12" fill="rgba(251,191,36,0.04)" stroke="var(--cloud-stroke)" stroke-dasharray="8,4" stroke-width="1.5"/>
+        <text x="532" y="52" class="t-cloud" font-size="10" font-weight="700">AI Engine (src/ai/)</text>
+
+        <!-- Component: Compiler -->
+        <rect x="545" y="75" width="180" height="80" rx="6" class="c-mask"/>
+        <rect x="545" y="75" width="180" height="80" rx="6" class="c-cloud" stroke-width="2"/>
+        <text x="635" y="102" class="t-primary" font-size="12" font-weight="700" text-anchor="middle">Compiler</text>
+        <text x="635" y="120" class="t-muted" font-size="8" text-anchor="middle">compiler.ts</text>
+        <text x="635" y="136" class="t-dim" font-size="7" text-anchor="middle">compileTruth() — LLM 编译</text>
+        <text x="635" y="148" class="t-dim" font-size="7" text-anchor="middle">changeType: append/update/</text>
+
+        <!-- Component: Timeline Extractor -->
+        <rect x="755" y="75" width="180" height="80" rx="6" class="c-mask"/>
+        <rect x="755" y="75" width="180" height="80" rx="6" class="c-cloud" stroke-width="2"/>
+        <text x="845" y="102" class="t-primary" font-size="12" font-weight="700" text-anchor="middle">Timeline Extractor</text>
+        <text x="845" y="120" class="t-muted" font-size="8" text-anchor="middle">timeline-extractor.ts</text>
+        <text x="845" y="136" class="t-dim" font-size="7" text-anchor="middle">extractTimelineEvents()</text>
+        <text x="845" y="148" class="t-dim" font-size="7" text-anchor="middle">normalizeDate()</text>
+
+        <!-- Component: Entity Link -->
+        <rect x="545" y="185" width="180" height="80" rx="6" class="c-mask"/>
+        <rect x="545" y="185" width="180" height="80" rx="6" class="c-cloud" stroke-width="2"/>
+        <text x="635" y="212" class="t-primary" font-size="12" font-weight="700" text-anchor="middle">Entity Link</text>
+        <text x="635" y="230" class="t-muted" font-size="8" text-anchor="middle">entity-link.ts</text>
+        <text x="635" y="246" class="t-dim" font-size="7" text-anchor="middle">extractRelations()</text>
+        <text x="635" y="258" class="t-dim" font-size="7" text-anchor="middle">12 种关系 · slug 生成</text>
+
+        <!-- Component: AX Pipeline -->
+        <rect x="755" y="185" width="180" height="80" rx="6" class="c-mask"/>
+        <rect x="755" y="185" width="180" height="80" rx="6" class="c-cloud" stroke-width="2"/>
+        <text x="845" y="212" class="t-primary" font-size="12" font-weight="700" text-anchor="middle">AX Pipeline</text>
+        <text x="845" y="230" class="t-muted" font-size="8" text-anchor="middle">ax-pipeline.ts</text>
+        <text x="845" y="246" class="t-dim" font-size="7" text-anchor="middle">AIPipeline 基类</text>
+        <text x="845" y="258" class="t-dim" font-size="7" text-anchor="middle">parseJsonObject / fallback</text>
+
+        <!-- Component: Embedding Factory -->
+        <rect x="545" y="295" width="180" height="60" rx="6" class="c-mask"/>
+        <rect x="545" y="295" width="180" height="60" rx="6" class="c-database" stroke-width="1.5"/>
+        <text x="635" y="318" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Embedding Factory</text>
+        <text x="635" y="336" class="t-muted" font-size="8" text-anchor="middle">Hash (本地) / OpenAI (API)</text>
+
+        <!-- Component: AX Adapter -->
+        <rect x="755" y="295" width="180" height="60" rx="6" class="c-mask"/>
+        <rect x="755" y="295" width="180" height="60" rx="6" class="c-cloud" stroke-width="1.5"/>
+        <text x="845" y="318" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">AX Adapter</text>
+        <text x="845" y="336" class="t-muted" font-size="8" text-anchor="middle">ax-adapter.ts — @ax-llm/ax</text>
+
+        <!-- ===== Markdown Parser Container ===== -->
+        <rect x="30" y="400" width="940" height="100" rx="12" fill="rgba(251,146,60,0.04)" stroke="var(--messagebus-stroke)" stroke-dasharray="8,4" stroke-width="1.5"/>
+        <text x="42" y="422" class="t-messagebus" font-size="10" font-weight="700">Markdown / Document Parser (src/markdown/)</text>
+
+        <!-- Component: Parser -->
+        <rect x="55" y="440" width="140" height="45" rx="6" class="c-mask"/>
+        <rect x="55" y="440" width="140" height="45" rx="6" class="c-messagebus" stroke-width="1"/>
+        <text x="125" y="460" class="t-primary" font-size="10" font-weight="600" text-anchor="middle">Markdown Parser</text>
+        <text x="125" y="476" class="t-dim" font-size="7" text-anchor="middle">frontmatter + body</text>
+
+        <!-- Component: Document Loader -->
+        <rect x="220" y="440" width="140" height="45" rx="6" class="c-mask"/>
+        <rect x="220" y="440" width="140" height="45" rx="6" class="c-messagebus" stroke-width="1"/>
+        <text x="290" y="460" class="t-primary" font-size="10" font-weight="600" text-anchor="middle">Document Loader</text>
+        <text x="290" y="476" class="t-dim" font-size="7" text-anchor="middle">PDF/DOCX/HTML/URL</text>
+
+        <!-- Component: IO -->
+        <rect x="385" y="440" width="140" height="45" rx="6" class="c-mask"/>
+        <rect x="385" y="440" width="140" height="45" rx="6" class="c-messagebus" stroke-width="1"/>
+        <text x="455" y="460" class="t-primary" font-size="10" font-weight="600" text-anchor="middle">IO Helpers</text>
+        <text x="455" y="476" class="t-dim" font-size="7" text-anchor="middle">readFile / write / import</text>
+
+        <!-- ===== Configuration Container ===== -->
+        <rect x="30" y="530" width="940" height="80" rx="12" fill="rgba(148,163,184,0.04)" stroke="var(--external-stroke)" stroke-dasharray="8,4" stroke-width="1.5"/>
+        <text x="42" y="552" class="t-external" font-size="10" font-weight="700">Configuration & Settings (src/config/)</text>
+
+        <!-- Component: Config -->
+        <rect x="55" y="570" width="120" height="30" rx="4" class="c-mask"/>
+        <rect x="55" y="570" width="120" height="30" rx="4" class="c-external" stroke-width="1"/>
+        <text x="115" y="588" class="t-primary" font-size="9" font-weight="600" text-anchor="middle">Config Loader</text>
+
+        <!-- Component: Settings -->
+        <rect x="200" y="570" width="120" height="30" rx="4" class="c-mask"/>
+        <rect x="200" y="570" width="120" height="30" rx="4" class="c-external" stroke-width="1"/>
+        <text x="260" y="588" class="t-primary" font-size="9" font-weight="600" text-anchor="middle">LLM Settings</text>
+
+        <!-- Component: Paths -->
+        <rect x="345" y="570" width="120" height="30" rx="4" class="c-mask"/>
+        <rect x="345" y="570" width="120" height="30" rx="4" class="c-external" stroke-width="1"/>
+        <text x="405" y="588" class="t-primary" font-size="9" font-weight="600" text-anchor="middle">Path Manager</text>
+
+        <!-- Component: Schema -->
+        <rect x="490" y="570" width="120" height="30" rx="4" class="c-mask"/>
+        <rect x="490" y="570" width="120" height="30" rx="4" class="c-database" stroke-width="1"/>
+        <text x="550" y="588" class="t-primary" font-size="9" font-weight="600" text-anchor="middle">DB Schema DDL</text>
+
+        <!-- ===== Arrows ===== -->
+        <!-- Compile Entry → Compiler -->
+        <line x1="185" y1="310" x2="543" y2="130" class="a-emphasis" stroke-width="1.5" marker-end="url(#arrowhead-emphasis)"/>
+        <rect x="300" y="200" width="80" height="16" rx="4" class="c-mask"/>
+        <text x="340" y="211" class="t-muted" font-size="8" text-anchor="middle">调用编译</text>
+
+        <!-- Search → Embedding -->
+        <line x1="275" y1="345" x2="600" y2="355" class="a-dashed" stroke-width="1" marker-end="url(#arrowhead-dashed)"/>
+        <rect x="410" y="338" width="50" height="14" rx="4" class="c-mask"/>
+        <text x="435" y="348" class="t-dim" font-size="7" text-anchor="middle">向量</text>
+
+        <!-- Link Manager → Entity Link -->
+        <line x1="475" y1="110" x2="543" y2="240" class="a-default" stroke-width="1" marker-end="url(#arrowhead)"/>
+        <rect x="490" y="160" width="50" height="14" rx="4" class="c-mask"/>
+        <text x="515" y="170" class="t-muted" font-size="7">关系</text>
+
+        <!-- Compiler → AX Pipeline -->
+        <line x1="725" y1="115" x2="753" y2="230" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <rect x="728" y="160" width="40" height="14" rx="4" class="c-mask"/>
+        <text x="748" y="170" class="t-muted" font-size="7">调用</text>
+
+        <!-- Timeline Extractor → AX Pipeline -->
+        <line x1="845" y1="155" x2="845" y2="183" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+        <!-- Page CRUD → Parser -->
+        <line x1="120" y1="345" x2="120" y2="438" class="a-default" stroke-width="1" marker-end="url(#arrowhead)"/>
+        <rect x="128" y="380" width="50" height="14" rx="4" class="c-mask"/>
+        <text x="153" y="390" class="t-muted" font-size="7">解析</text>
+
+        <!-- ===== Legend ===== -->
+        <text x="30" y="640" class="t-primary" font-size="9" font-weight="600">Legend</text>
+        <rect x="30" y="650" width="14" height="9" rx="2" class="c-backend" stroke-width="1"/>
+        <text x="48" y="657" class="t-muted" font-size="7">Repository Component</text>
+        <rect x="30" y="664" width="14" height="9" rx="2" class="c-cloud" stroke-width="1"/>
+        <text x="48" y="671" class="t-muted" font-size="7">AI Component</text>
+        <rect x="30" y="678" width="14" height="9" rx="2" class="c-database" stroke-width="1"/>
+        <text x="48" y="685" class="t-muted" font-size="7">Storage / Index</text>
+        <line x1="200" y1="657" x2="220" y2="657" class="a-emphasis" stroke-width="1.5" marker-end="url(#arrowhead-emphasis)"/>
+        <text x="224" y="660" class="t-muted" font-size="7">Primary Flow</text>
+        <line x1="200" y1="678" x2="220" y2="678" class="a-dashed" stroke-width="1" marker-end="url(#arrowhead-dashed)"/>
+        <text x="224" y="681" class="t-muted" font-size="7">Secondary</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-header"><div class="card-dot emerald"></div><h3>BrainRepository 组件</h3></div>
+        <ul>
+          <li>• Page CRUD: 页面实体增删改查</li>
+          <li>• Search & Query: 全文 + 向量混合检索</li>
+          <li>• Link Manager: 实体关系管理 (links 表)</li>
+          <li>• Timeline / Tag / Raw Data 管理器</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-dot amber"></div><h3>AI Engine 组件</h3></div>
+        <ul>
+          <li>• Compiler: LLM 驱动的智能编译</li>
+          <li>• Timeline Extractor: 事件抽取 + 日期归一化</li>
+          <li>• Entity Link: 12 种关系类型抽取</li>
+          <li>• AX Pipeline: LLM 调用生命周期封装</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-dot orange"></div><h3>共享基础设施</h3></div>
+        <ul>
+          <li>• Markdown Parser: frontmatter + body 解析</li>
+          <li>• Document Loader: 多格式文档处理</li>
+          <li>• Config/Settings: LLM 配置管理</li>
+          <li>• DB Schema: 6 张核心表 DDL</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="footer">ex-brain · C4 Model · Level 3: Component · 2026-05-21</p>
+  </div>
+
+  <script>
+    /* ============================================================
+       Theme toggle — persists to localStorage, respects system pref
+       ============================================================ */
+    var Archify = {};
+
+    Archify.theme = (function () {
+      var STORAGE_KEY = 'archify-theme';
+      var html = document.documentElement;
+      var btn = document.getElementById('btn-theme');
+      var icon = document.getElementById('theme-icon');
+      var label = document.getElementById('theme-label');
+
+      function resolveInitial() {
+        try {
+          var param = new URLSearchParams(window.location.search).get('theme');
+          if (param === 'light' || param === 'dark') return param;
+        } catch (_) {}
+        var saved = localStorage.getItem(STORAGE_KEY);
+        if (saved === 'light' || saved === 'dark') return saved;
+        return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      }
+
+      function apply(theme) {
+        html.setAttribute('data-theme', theme);
+        icon.textContent = theme === 'dark' ? '\u263E' : '\u263C';
+        label.textContent = theme === 'dark' ? 'Dark' : 'Light';
+        btn.setAttribute('aria-pressed', theme === 'light' ? 'true' : 'false');
+      }
+
+      function toggle() {
+        var next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+        apply(next);
+        localStorage.setItem(STORAGE_KEY, next);
+      }
+
+      apply(resolveInitial());
+      btn.addEventListener('click', toggle);
+
+      return { toggle: toggle };
+    })();
+
+    /* ============================================================
+       Export — PNG / JPEG / WebP / SVG (download) and Copy PNG (clipboard)
+       ============================================================ */
+    (function () {
+      var RASTER_SCALE = 4;
+
+      function diagramFilename() {
+        var title = (document.title || 'diagram').replace(/\s+Architecture(\s+Diagram)?$/i, '').trim();
+        return title.replace(/[^a-z0-9_\-]+/gi, '-')
+                    .toLowerCase()
+                    .replace(/^-+|-+$/g, '') || 'diagram';
+      }
+
+      function currentBg() {
+        return getComputedStyle(document.body).backgroundColor || '#ffffff';
+      }
+
+      function serializeSvg(scale, opts) {
+        scale = scale || 1;
+        opts = opts || {};
+        var autoTheme = opts.autoTheme === true;
+
+        var svg = document.querySelector('.diagram-container svg');
+        var clone = svg.cloneNode(true);
+
+        var vb = svg.viewBox.baseVal;
+        clone.setAttribute('width', vb.width * scale);
+        clone.setAttribute('height', vb.height * scale);
+        clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+
+        var hostStyle = Array.prototype.map.call(document.querySelectorAll('style'), function (s) {
+          return s.textContent;
+        }).join('\n');
+
+        var varNames = [
+          '--bg','--grid','--text','--text-muted','--text-dim',
+          '--arrow','--arrow-emphasis','--mask',
+          '--frontend-fill','--frontend-stroke',
+          '--backend-fill','--backend-stroke',
+          '--database-fill','--database-stroke',
+          '--cloud-fill','--cloud-stroke',
+          '--security-fill','--security-stroke',
+          '--messagebus-fill','--messagebus-stroke',
+          '--external-fill','--external-stroke'
+        ];
+
+        function resolveVars(themeAttr) {
+          var probe = document.createElement('div');
+          probe.setAttribute('data-theme', themeAttr);
+          probe.style.cssText = 'position:absolute;width:0;height:0;visibility:hidden;';
+          document.body.appendChild(probe);
+          try {
+            var c = getComputedStyle(probe);
+            return varNames.map(function (n) {
+              return n + ': ' + c.getPropertyValue(n).trim() + ';';
+            }).join(' ');
+          } finally {
+            document.body.removeChild(probe);
+          }
+        }
+
+        var fontFallback = [400, 500, 600, 700].map(function (w) {
+          return "@font-face { font-family: 'JetBrains Mono'; font-weight: " + w +
+                 "; src: local('JetBrains Mono'), local('JetBrainsMono-Regular'); }";
+        }).join('\n');
+
+        var style = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+        var bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        bgRect.setAttribute('width', '100%');
+        bgRect.setAttribute('height', '100%');
+
+        if (autoTheme) {
+          var darkVars = resolveVars('dark');
+          var lightVars = resolveVars('light');
+
+          style.textContent =
+            fontFallback + '\n' +
+            "svg { font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace; }\n" +
+            hostStyle + '\n' +
+            ':root, svg { ' + darkVars + ' }\n' +
+            '@media (prefers-color-scheme: light) { :root, svg { ' + lightVars + ' } }\n' +
+            'svg[data-theme="light"] { ' + lightVars + ' }\n' +
+            'svg[data-theme="dark"] { ' + darkVars + ' }\n' +
+            'rect.c-bg-rect { fill: var(--bg); }\n';
+
+          clone.removeAttribute('data-theme');
+          bgRect.setAttribute('class', 'c-bg-rect');
+        } else {
+          var theme = document.documentElement.getAttribute('data-theme') || 'dark';
+          var themeHost = document.querySelector('[data-theme="' + theme + '"]') || document.documentElement;
+          var computed = getComputedStyle(themeHost);
+          var vars = varNames.map(function (n) {
+            return n + ': ' + computed.getPropertyValue(n).trim() + ';';
+          }).join(' ');
+
+          style.textContent =
+            fontFallback + '\n' +
+            "svg { font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace; }\n" +
+            hostStyle + '\n' +
+            ':root, svg { ' + vars + ' }\n';
+
+          bgRect.setAttribute('fill', computed.getPropertyValue('--bg').trim() || '#ffffff');
+        }
+
+        clone.insertBefore(style, clone.firstChild);
+        clone.insertBefore(bgRect, style.nextSibling);
+
+        return {
+          svgString: new XMLSerializer().serializeToString(clone),
+          width: vb.width * scale,
+          height: vb.height * scale
+        };
+      }
+
+      function download(blob, filename) {
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      }
+
+      var MAX_CANVAS_PIXELS = 16 * 1024 * 1024;
+
+      function pickSafeScale(vbW, vbH) {
+        for (var s = RASTER_SCALE; s >= 1; s--) {
+          if (vbW * s * vbH * s <= MAX_CANVAS_PIXELS) return s;
+        }
+        return 1;
+      }
+
+      function rasterize(format) {
+        var svg = document.querySelector('.diagram-container svg');
+        var vb = svg.viewBox.baseVal;
+        var scale = pickSafeScale(vb.width, vb.height);
+        var data = serializeSvg(scale);
+        var svgBlob = new Blob([data.svgString], { type: 'image/svg+xml;charset=utf-8' });
+        var svgUrl = URL.createObjectURL(svgBlob);
+
+        return new Promise(function (resolve, reject) {
+          var img = new Image();
+          img.onload = function () {
+            var canvas = document.createElement('canvas');
+            canvas.width = data.width;
+            canvas.height = data.height;
+            var ctx = canvas.getContext('2d');
+            if (format === 'jpeg') {
+              ctx.fillStyle = currentBg();
+              ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+            ctx.drawImage(img, 0, 0);
+            URL.revokeObjectURL(svgUrl);
+            var mime = format === 'jpeg' ? 'image/jpeg' :
+                       format === 'webp' ? 'image/webp' : 'image/png';
+            var quality = format === 'png' ? undefined : 0.95;
+            canvas.toBlob(function (blob) {
+              if (!blob) reject(new Error('toBlob returned null for ' + format));
+              else resolve(blob);
+            }, mime, quality);
+          };
+          img.onerror = function (e) {
+            URL.revokeObjectURL(svgUrl);
+            reject(e);
+          };
+          img.src = svgUrl;
+        });
+      }
+
+      var menu = document.getElementById('export-menu');
+      var btn = document.getElementById('btn-export');
+      var items = function () {
+        return Array.prototype.slice.call(menu.querySelectorAll('button[role="menuitem"]'));
+      };
+
+      function canCopyImage() {
+        return typeof ClipboardItem !== 'undefined' &&
+               navigator.clipboard &&
+               typeof navigator.clipboard.write === 'function';
+      }
+
+      function supports(format) {
+        if (format === 'svg' || format === 'png') return true;
+        var mime = format === 'jpeg' ? 'image/jpeg' : 'image/webp';
+        try {
+          var c = document.createElement('canvas');
+          c.width = c.height = 2;
+          return c.toDataURL(mime).indexOf('data:' + mime) === 0;
+        } catch (_) { return false; }
+      }
+
+      items().forEach(function (it) {
+        if (it.dataset.format && !supports(it.dataset.format)) {
+          it.disabled = true;
+          it.title = 'Not supported by this browser';
+          it.style.opacity = '0.5';
+        }
+        if (it.dataset.action === 'copy' && !canCopyImage()) {
+          it.disabled = true;
+          it.title = 'Clipboard image write not supported by this browser';
+          it.style.opacity = '0.5';
+        }
+      });
+
+      function toast(msg) {
+        var t = document.createElement('div');
+        t.className = 'archify-toast';
+        t.textContent = msg;
+        document.body.appendChild(t);
+        requestAnimationFrame(function () { t.classList.add('show'); });
+        setTimeout(function () {
+          t.classList.remove('show');
+          setTimeout(function () { t.remove(); }, 300);
+        }, 1500);
+      }
+
+      function openMenu() {
+        menu.classList.add('open');
+        btn.setAttribute('aria-expanded', 'true');
+        var first = items().filter(function (i) { return !i.disabled; })[0];
+        if (first) first.focus();
+      }
+      function closeMenu(focusTrigger) {
+        menu.classList.remove('open');
+        btn.setAttribute('aria-expanded', 'false');
+        if (focusTrigger) btn.focus();
+      }
+      function isOpen() { return menu.classList.contains('open'); }
+
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (isOpen()) closeMenu(false);
+        else openMenu();
+      });
+      document.addEventListener('click', function (e) {
+        if (!menu.contains(e.target) && e.target !== btn) closeMenu(false);
+      });
+
+      menu.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') { e.preventDefault(); closeMenu(true); return; }
+        if (e.key === 'Tab')    { closeMenu(false); return; }
+
+        var available = items().filter(function (i) { return !i.disabled; });
+        var current = available.indexOf(document.activeElement);
+        switch (e.key) {
+          case 'ArrowDown':
+            e.preventDefault();
+            if (available.length) available[(current + 1 + available.length) % available.length].focus();
+            break;
+          case 'ArrowUp':
+            e.preventDefault();
+            if (available.length) available[(current - 1 + available.length) % available.length].focus();
+            break;
+          case 'Home':
+            e.preventDefault();
+            if (available[0]) available[0].focus();
+            break;
+          case 'End':
+            e.preventDefault();
+            if (available.length) available[available.length - 1].focus();
+            break;
+        }
+      });
+
+      function runExport(format) {
+        var base = diagramFilename();
+        closeMenu(false);
+        return (format === 'svg'
+          ? Promise.resolve(serializeSvg(1, { autoTheme: true })).then(function (d) {
+              download(new Blob([d.svgString], { type: 'image/svg+xml;charset=utf-8' }), base + '.svg');
+            })
+          : rasterize(format).then(function (blob) {
+              download(blob, base + '.' + format);
+            })
+        ).catch(function (err) {
+          console.error(err);
+          alert('Export failed: ' + (err && err.message ? err.message : format));
+        });
+      }
+
+      function runCopy() {
+        closeMenu(false);
+        if (!canCopyImage()) {
+          alert('Clipboard image write not supported in this browser.');
+          return;
+        }
+        return rasterize('png').then(function (blob) {
+          return navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        }).then(function () {
+          toast('Copied PNG to clipboard');
+        }).catch(function (err) {
+          console.error(err);
+          alert('Copy failed: ' + (err && err.message ? err.message : 'unknown'));
+        });
+      }
+
+      menu.addEventListener('click', function (e) {
+        var copyBtn = e.target.closest('button[data-action="copy"]');
+        if (copyBtn && !copyBtn.disabled) { runCopy(); return; }
+
+        var formatBtn = e.target.closest('button[data-format]');
+        if (formatBtn && !formatBtn.disabled) { runExport(formatBtn.dataset.format); }
+      });
+
+      Archify.exportMenu = { open: openMenu, close: closeMenu, isOpen: isOpen, run: runExport };
+
+      try {
+        if (new URLSearchParams(window.location.search).get('openExport') === '1') {
+          var openWhenReady = function () {
+            requestAnimationFrame(function () { requestAnimationFrame(openMenu); });
+          };
+          if (document.fonts && document.fonts.ready) {
+            document.fonts.ready.then(openWhenReady);
+          } else {
+            setTimeout(openWhenReady, 200);
+          }
+        }
+      } catch (_) {}
+    })();
+
+    /* ============================================================
+       Global keyboard shortcuts
+         T -> toggle theme
+         E -> open export menu
+       ============================================================ */
+    document.addEventListener('keydown', function (e) {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      var t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (e.key === 't' || e.key === 'T') {
+        e.preventDefault();
+        Archify.theme.toggle();
+      } else if (e.key === 'e' || e.key === 'E') {
+        e.preventDefault();
+        if (!Archify.exportMenu.isOpen()) Archify.exportMenu.open();
+      }
+    });
+  </script>
+</body>
+</html>

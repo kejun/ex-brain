@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ebrain query --llm 执行流程</title>
+<style>
+  :root {
+    --bg: #f5f7fa;
+    --surface: #ffffff;
+    --surface2: #f0f2f5;
+    --border: #e0e4ea;
+    --text: #1a1d27;
+    --text-dim: #6b7280;
+    --accent: #6c5ce7;
+    --accent2: #5a4bd1;
+    --green: #10b981;
+    --orange: #d97706;
+    --red: #ef4444;
+    --blue: #3b82f6;
+    --cyan: #0891b2;
+    --pink: #ec4899;
+    --violet: #7c3aed;
+    --mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.7;
+    min-height: 100vh;
+  }
+
+  .hero {
+    text-align: center;
+    padding: 60px 20px 40px;
+    background: linear-gradient(180deg, rgba(108,92,231,0.06) 0%, transparent 100%);
+    border-bottom: 1px solid var(--border);
+  }
+  .hero h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), var(--cyan));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 8px;
+  }
+  .hero .cmd {
+    font-family: var(--mono);
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 24px;
+    display: inline-block;
+    font-size: 1rem;
+    color: var(--cyan);
+    letter-spacing: 0.5px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .hero .cmd span.flag { color: var(--orange); }
+  .hero .cmd span.arg  { color: var(--green); }
+
+  .container { max-width: 1100px; margin: 0 auto; padding: 30px 20px 80px; }
+
+  /* ---------- Overview Stats ---------- */
+  .overview {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin-bottom: 48px;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  }
+  .stat-card .num { font-size: 2rem; font-weight: 700; color: var(--accent); }
+  .stat-card .label { color: var(--text-dim); font-size: 0.85rem; margin-top: 4px; }
+
+  /* ---------- Section Titles ---------- */
+  .section-title {
+    font-size: 1.4rem;
+    font-weight: 700;
+    margin: 48px 0 24px;
+    padding-left: 16px;
+    border-left: 4px solid var(--accent);
+    color: var(--text);
+  }
+
+  /* ---------- Pipeline (horizontal flow) ---------- */
+  .pipeline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: stretch;
+    margin-bottom: 48px;
+    padding: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  }
+  .pipe-step {
+    flex: 1;
+    min-width: 120px;
+    background: var(--surface2);
+    border-radius: 10px;
+    padding: 14px 12px;
+    text-align: center;
+    position: relative;
+    border: 1px solid var(--border);
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .pipe-step:hover { transform: translateY(-3px); box-shadow: 0 6px 24px rgba(108,92,231,0.12); }
+  .pipe-step .step-icon { font-size: 1.6rem; margin-bottom: 6px; }
+  .pipe-step .step-name { font-weight: 600; font-size: 0.85rem; }
+  .pipe-step .step-file { font-family: var(--mono); font-size: 0.7rem; color: var(--text-dim); margin-top: 4px; }
+  .pipe-arrow {
+    display: flex;
+    align-items: center;
+    color: var(--accent2);
+    font-size: 1.3rem;
+    flex-shrink: 0;
+    align-self: center;
+  }
+
+  /* ---------- Detail Cards ---------- */
+  .detail-grid { display: flex; flex-direction: column; gap: 20px; }
+  .detail-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  }
+  .detail-card:hover { border-color: var(--accent); box-shadow: 0 2px 12px rgba(108,92,231,0.10); }
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 20px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    user-select: none;
+  }
+  .card-header .badge {
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .badge.entry    { background: rgba(108,92,231,0.12); color: var(--accent); }
+  .badge.search   { background: rgba(59,130,246,0.12);  color: var(--blue); }
+  .badge.context  { background: rgba(217,119,6,0.12);   color: var(--orange); }
+  .badge.llm      { background: rgba(16,185,129,0.12);  color: var(--green); }
+  .badge.output   { background: rgba(236,72,153,0.12);  color: var(--pink); }
+  .badge.db       { background: rgba(8,145,178,0.12);   color: var(--cyan); }
+  .badge.ontology { background: rgba(139,92,246,0.15);  color: var(--violet); }
+
+  .card-header h3 { flex: 1; font-size: 1rem; font-weight: 600; }
+  .card-header .toggle { color: var(--text-dim); font-size: 0.85rem; transition: transform 0.2s; }
+  .card-header .toggle.open { transform: rotate(180deg); }
+
+  .card-body { padding: 20px; display: none; }
+  .card-body.open { display: block; }
+
+  .sub-steps { display: flex; flex-direction: column; gap: 12px; }
+  .sub-step {
+    display: flex;
+    gap: 12px;
+    padding: 12px 14px;
+    background: var(--surface2);
+    border-radius: 8px;
+    border-left: 3px solid var(--accent);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+  }
+  .sub-step .ss-num {
+    flex-shrink: 0;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.75rem; font-weight: 700;
+  }
+  .sub-step .ss-content { flex: 1; }
+  .sub-step .ss-content h4 { font-size: 0.9rem; font-weight: 600; margin-bottom: 4px; }
+  .sub-step .ss-content p  { font-size: 0.82rem; color: var(--text-dim); }
+  .sub-step .ss-content code {
+    font-family: var(--mono);
+    background: rgba(108,92,231,0.10);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.78rem;
+    color: var(--accent2);
+  }
+
+  /* Code blocks */
+  .code-block {
+    background: #f8f9fb;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    line-height: 1.6;
+    overflow-x: auto;
+    margin-top: 10px;
+    color: #374151;
+  }
+  .code-block .kw  { color: var(--pink); }
+  .code-block .fn  { color: var(--blue); }
+  .code-block .str { color: var(--green); }
+  .code-block .cm  { color: var(--text-dim); font-style: italic; }
+  .code-block .num { color: var(--orange); }
+
+  /* Layer diagram */
+  .layer-diagram { margin-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .layer {
+    display: flex; align-items: center; gap: 14px;
+    padding: 10px 14px; border-radius: 8px;
+    background: var(--surface2); border: 1px solid var(--border);
+  }
+  .layer .l-icon { font-size: 1.3rem; }
+  .layer .l-name { font-weight: 600; font-size: 0.88rem; min-width: 100px; }
+  .layer .l-desc { font-size: 0.8rem; color: var(--text-dim); }
+  .layer .l-color { width: 4px; height: 36px; border-radius: 2px; flex-shrink: 0; }
+  .layer:nth-child(1) .l-color { background: var(--blue); }
+  .layer:nth-child(2) .l-color { background: var(--orange); }
+  .layer:nth-child(3) .l-color { background: var(--green); }
+
+  /* Sequence Diagram */
+  .seq-container {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+    overflow-x: auto;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  }
+  .seq-container svg { display: block; margin: 0 auto; }
+
+  /* ========== Ontology Section ========== */
+  .ontology-hero {
+    background: linear-gradient(135deg, rgba(124,58,237,0.06) 0%, rgba(16,185,129,0.06) 100%);
+    border: 2px solid rgba(124,58,237,0.20);
+    border-radius: 16px;
+    padding: 28px 32px;
+    margin-bottom: 32px;
+    box-shadow: 0 2px 12px rgba(124,58,237,0.08);
+  }
+  .ontology-hero h2 { font-size: 1.3rem; font-weight: 700; color: var(--violet); margin-bottom: 8px; }
+  .ontology-hero p { color: var(--text-dim); font-size: 0.92rem; line-height: 1.8; }
+  .ontology-hero strong { color: var(--text); }
+
+  .onto-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+    margin: 20px 0;
+  }
+  .onto-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px;
+    border-top: 3px solid var(--accent);
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .onto-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(108,92,231,0.10); }
+  .onto-card:nth-child(2) { border-top-color: var(--blue); }
+  .onto-card:nth-child(3) { border-top-color: var(--green); }
+  .onto-card:nth-child(4) { border-top-color: var(--orange); }
+  .onto-card h4 {
+    font-size: 0.95rem; font-weight: 700; margin-bottom: 10px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .onto-card ul { list-style: none; padding: 0; margin: 0; }
+  .onto-card li {
+    font-size: 0.82rem; padding: 4px 0; color: var(--text-dim);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .onto-card li::before {
+    content: "·"; color: var(--accent); font-weight: 700; font-size: 1.2rem;
+  }
+  .onto-card li code {
+    font-family: var(--mono);
+    background: rgba(108,92,231,0.08);
+    padding: 1px 5px; border-radius: 3px; font-size: 0.76rem; color: var(--accent2);
+  }
+
+  .onto-flow {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    padding: 16px 20px; background: var(--surface2); border-radius: 10px; margin: 16px 0;
+  }
+  .onto-flow-item {
+    font-size: 0.85rem; font-weight: 600;
+    padding: 6px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  }
+  .onto-flow-item.highlight { background: rgba(108,92,231,0.08); border-color: var(--accent); color: var(--accent); }
+  .onto-flow-arrow { color: var(--accent); font-size: 1rem; }
+
+  .onto-highlight {
+    background: rgba(108,92,231,0.06);
+    border-left: 3px solid var(--accent);
+    padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 12px 0;
+    font-size: 0.88rem; line-height: 1.7;
+  }
+  .onto-highlight strong { color: var(--violet); }
+
+  /* Footer */
+  .footer {
+    text-align: center; padding: 30px;
+    color: var(--text-dim); font-size: 0.8rem;
+    border-top: 1px solid var(--border);
+  }
+
+  @media (max-width: 768px) {
+    .pipeline { flex-direction: column; }
+    .pipe-arrow { transform: rotate(90deg); justify-content: center; }
+    .hero h1 { font-size: 1.4rem; }
+    .onto-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>ebrain query --llm 执行流程</h1>
+  <div class="cmd">
+    <span>ebrain</span>
+    <span>query</span>
+    <span class="flag">--llm</span>
+    <span class="arg">"统计企业的AI需求"</span>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- Overview Stats -->
+  <div class="overview">
+    <div class="stat-card"><div class="num">6</div><div class="label">主要阶段</div></div>
+    <div class="stat-card"><div class="num">3</div><div class="label">上下文层</div></div>
+    <div class="stat-card"><div class="num">~100K</div><div class="label">最大上下文字符</div></div>
+    <div class="stat-card"><div class="num">30s</div><div class="label">LLM 超时限制</div></div>
+  </div>
+
+  <!-- Pipeline Overview -->
+  <div class="section-title">📐 总览：执行流水线</div>
+  <div class="pipeline">
+    <div class="pipe-step"><div class="step-icon">🚀</div><div class="step-name">CLI 入口</div><div class="step-file">cli.ts</div></div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step"><div class="step-icon">📡</div><div class="step-name">解析参数</div><div class="step-file">query-cmd.ts</div></div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step"><div class="step-icon">🔗</div><div class="step-name">连接数据库</div><div class="step-file">brain-repo.ts</div></div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step"><div class="step-icon">🔍</div><div class="step-name">向量检索</div><div class="step-file">pagesCollection.query()</div></div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step"><div class="step-icon">📚</div><div class="step-name">构建上下文</div><div class="step-file">collectContextForLLM()</div></div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step"><div class="step-icon">🤖</div><div class="step-name">LLM 生成</div><div class="step-file">generateAnswerWithStream()</div></div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step"><div class="step-icon">📋</div><div class="step-name">输出结果</div><div class="step-file">stdout / stderr</div></div>
+  </div>
+
+  <!-- Ontology Modeling -->
+  <div class="section-title">🧬 本体建模（Ontology Modeling）—— 知识库的骨架</div>
+
+  <div class="ontology-hero">
+    <h2>🧬 本体建模在 ebrain 中的核心作用</h2>
+    <p>
+      本体建模（Ontology Modeling）是 ex-brain 将<strong>非结构化文本</strong>转化为<strong>结构化知识图谱</strong>的核心机制。它定义了「知识由什么构成」——<strong>实体（Entity）</strong>、<strong>关系（Relation）</strong>、<strong>类型（Type）</strong>和<strong>事实（Fact）</strong>的组织方式。在 <code>ebrain query --llm</code> 的执行链路中，本体建模贯穿始终，决定了检索、上下文构建和回答生成的质量。
+    </p>
+  </div>
+
+  <!-- Ontology 4 Pillars -->
+  <div class="onto-grid">
+    <div class="onto-card">
+      <h4>📦 实体类型系统 <span style="font-size:0.7rem;color:var(--text-dim)">types/index.ts</span></h4>
+      <ul>
+        <li><code>person</code> 人物</li>
+        <li><code>company</code> 企业</li>
+        <li><code>deal</code> 交易</li>
+        <li><code>project</code> 项目</li>
+        <li><code>civic</code> 政务</li>
+        <li><code>note</code> 笔记</li>
+        <li><code>yc</code> 创业公司</li>
+        <li><code>other</code> 其他</li>
+      </ul>
+    </div>
+    <div class="onto-card">
+      <h4>🔗 关系类型体系 <span style="font-size:0.7rem;color:var(--text-dim)">entity-link.ts</span></h4>
+      <ul>
+        <li><code>founder_of</code> 创立</li>
+        <li><code>works_at</code> 任职</li>
+        <li><code>leader_of</code> 负责</li>
+        <li><code>collaborates_with</code> 合作</li>
+        <li><code>competes_with</code> 竞争</li>
+        <li><code>acquired</code> 收购</li>
+        <li><code>invested_in</code> 投资</li>
+        <li><code>part_of</code> 隶属</li>
+      </ul>
+    </div>
+    <div class="onto-card">
+      <h4>🏷️ Slug 命名空间 <span style="font-size:0.7rem;color:var(--text-dim)">entity-link.ts</span></h4>
+      <ul>
+        <li><code>people/xxx</code> 人物页面</li>
+        <li><code>companies/xxx</code> 企业页面</li>
+        <li><code>projects/xxx</code> 项目页面</li>
+        <li><code>organizations/xxx</code> 组织页面</li>
+        <li><code>events/xxx</code> 事件页面</li>
+        <li><code>entities/xxx</code> 通用实体</li>
+      </ul>
+    </div>
+    <div class="onto-card">
+      <h4>📋 页面结构 <span style="font-size:0.7rem;color:var(--text-dim)">brain-repo.ts</span></h4>
+      <ul>
+        <li><code>compiledTruth</code> 编译后的事实集合</li>
+        <li><code>timeline</code> 时间线索引</li>
+        <li><code>links</code> 实体间有向关系图</li>
+        <li><code>raw_data</code> 原始文档溯源</li>
+        <li><code>frontmatter</code> 元数据标签</li>
+        <li><code>page_tags</code> 分类标签</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Ontology Flow in query --llm -->
+  <div class="detail-card" style="margin-bottom: 32px;">
+    <div class="card-header" onclick="toggleCard(this)">
+      <span class="badge ontology">本体</span>
+      <h3>本体建模如何影响 query --llm 的执行</h3>
+      <span class="toggle">▼</span>
+    </div>
+    <div class="card-body open">
+      <div class="sub-steps">
+
+        <div class="sub-step" style="border-left-color: var(--violet);">
+          <div class="ss-num" style="background: var(--violet);">①</div>
+          <div class="ss-content">
+            <h4>写入阶段：LLM 驱动的自动本体构建</h4>
+            <p>当用户通过 <code>smart-ingest</code> 或 <code>put</code> 写入内容时，<code>applyEntityLinks()</code> 调用 LLM 提取实体和关系：</p>
+            <div class="onto-flow">
+              <span class="onto-flow-item">原始文本</span>
+              <span class="onto-flow-arrow">→</span>
+              <span class="onto-flow-item highlight">extractRelations() 实体抽取</span>
+              <span class="onto-flow-arrow">→</span>
+              <span class="onto-flow-item">entityToSlug() 命名空间归位</span>
+              <span class="onto-flow-arrow">→</span>
+              <span class="onto-flow-item">ensureEntityPage() 创建/更新实体页</span>
+              <span class="onto-flow-arrow">→</span>
+              <span class="onto-flow-item">link() 写入关系边</span>
+            </div>
+            <div class="onto-highlight">
+              <strong>关键点：</strong>实体类型识别（中英混合关键词匹配）、消歧（<code>findSimilarSlug</code> 语义搜索找已存在实体）、关系置信度过滤（默认阈值 0.7）共同保证了本体质量。
+            </div>
+          </div>
+        </div>
+
+        <div class="sub-step" style="border-left-color: var(--blue);">
+          <div class="ss-num" style="background: var(--blue);">②</div>
+          <div class="ss-content">
+            <h4>检索阶段：类型加成（Type Boost）影响排序</h4>
+            <p>在 <code>query()</code> 混合评分中，本体类型直接影响检索排名：</p>
+            <div class="code-block">
+<span class="kw">const</span> typeBoost = String(md.type ?? <span class="str">""</span>) === <span class="str">"person"</span> ? <span class="num">0.05</span> : <span class="num">0</span>;
+<span class="kw">const</span> score = vectorScore * <span class="num">0.85</span> + freshnessBoost + typeBoost;
+            </div>
+            <p>人物类型获得 +0.05 加成，因为人名通常是知识图谱的核心节点。本体类型还存储为向量集合的 <code>metadata</code>，支持 <code>search --type company</code> 按类型过滤。</p>
+          </div>
+        </div>
+
+        <div class="sub-step" style="border-left-color: var(--green);">
+          <div class="ss-num" style="background: var(--green);">③</div>
+          <div class="ss-content">
+            <h4>上下文构建：关系图驱动的 Linked Pages 扩展</h4>
+            <p>在 <code>collectContextForLLM()</code> 的 Layer 3 中，系统沿着本体关系图扩展上下文：</p>
+            <div class="onto-flow">
+              <span class="onto-flow-item highlight">top hit 页面</span>
+              <span class="onto-flow-arrow">→</span>
+              <span class="onto-flow-item">outgoingLinks() 出边</span>
+              <span class="onto-flow-arrow">→</span>
+              <span class="onto-flow-item">backlinks() 入边</span>
+              <span class="onto-flow-arrow">→</span>
+              <span class="onto-flow-item highlight">keyword 相关度过滤</span>
+              <span class="onto-flow-arrow">→</span>
+              <span class="onto-flow-item">加载关联页面上下文</span>
+            </div>
+            <div class="onto-highlight">
+              <strong>关键点：</strong>这使得查询「张三的公司」时，不仅返回张三页面，还能通过关系图自动关联到他创立的公司页面，无需在问题中显式提及公司名。这是知识图谱对比传统检索的核心优势。
+            </div>
+          </div>
+        </div>
+
+        <div class="sub-step" style="border-left-color: var(--orange);">
+          <div class="ss-num" style="background: var(--orange);">④</div>
+          <div class="ss-content">
+            <h4>LLM 回答：结构化溯源引用</h4>
+            <p>Prompt 中要求 LLM 使用 <code>[[slug|标题]]</code> 格式引用来源，而 slug 本身携带本体语义：</p>
+            <div class="code-block">
+📄 1. [[companies/river-ai|River AI]] - 页面正文
+📄 2. [[people/zhang-san|张三]] - 页面正文
+🔗 3. [[people/li-si|李四]] - 关联页面: people/li-si (72.3%)
+            </div>
+            <p>用户通过 slug 路径（如 <code>companies/</code>, <code>people/</code>）即可判断信息的本体类型，实现<strong>可溯源、可验证</strong>的知识回答。</p>
+          </div>
+        </div>
+
+        <div class="sub-step" style="border-left-color: var(--pink);">
+          <div class="ss-num" style="background: var(--pink);">⑤</div>
+          <div class="ss-content">
+            <h4>消歧与实体对齐</h4>
+            <p><code>findSimilarSlug()</code> 通过语义搜索解决实体冲突（如「张三」和「张叁」是否同一人），置信度阈值 0.9 避免误匹配。这保证了知识图谱中不会出现重复节点。</p>
+            <div class="onto-highlight">
+              <strong>关键点：</strong>本体建模不是一次性的——每次 <code>ensureEntityPage()</code> 都会检查去重（<code>compiledTruth.includes(trimmedContext)</code>），同一事实不会重复添加，保证知识的一致性。
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Sequence Diagram -->
+  <div class="section-title">🔄 时序图</div>
+  <div class="seq-container">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 1080" font-family="SF Mono, Fira Code, monospace" font-size="12">
+      <defs>
+        <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#f8f9fb"/>
+          <stop offset="100%" stop-color="#f0f2f5"/>
+        </linearGradient>
+        <marker id="arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <path d="M0,0 L8,3 L0,6" fill="#6c5ce7"/>
+        </marker>
+      </defs>
+      <rect width="960" height="1080" fill="url(#bg)" rx="8"/>
+
+      <g transform="translate(0, 0)">
+        <rect x="60" y="20" width="120" height="36" rx="6" fill="#6c5ce7" opacity="0.15" stroke="#6c5ce7"/>
+        <text x="120" y="43" text-anchor="middle" fill="#5a4bd1" font-weight="600" font-size="13">CLI (cli.ts)</text>
+        <line x1="120" y1="56" x2="120" y2="1050" stroke="#6c5ce7" stroke-width="1" stroke-dasharray="4,4" opacity="0.3"/>
+
+        <rect x="260" y="20" width="140" height="36" rx="6" fill="#3b82f6" opacity="0.15" stroke="#3b82f6"/>
+        <text x="330" y="43" text-anchor="middle" fill="#3b82f6" font-weight="600" font-size="13">query-cmd.ts</text>
+        <line x1="330" y1="56" x2="330" y2="1050" stroke="#3b82f6" stroke-width="1" stroke-dasharray="4,4" opacity="0.3"/>
+
+        <rect x="480" y="20" width="140" height="36" rx="6" fill="#10b981" opacity="0.15" stroke="#10b981"/>
+        <text x="550" y="43" text-anchor="middle" fill="#10b981" font-weight="600" font-size="13">BrainRepository</text>
+        <line x1="550" y1="56" x2="550" y2="1050" stroke="#10b981" stroke-width="1" stroke-dasharray="4,4" opacity="0.3"/>
+
+        <rect x="700" y="20" width="140" height="36" rx="6" fill="#0891b2" opacity="0.15" stroke="#0891b2"/>
+        <text x="770" y="43" text-anchor="middle" fill="#0891b2" font-weight="600" font-size="13">SeekDB / 向量库</text>
+        <line x1="770" y1="56" x2="770" y2="1050" stroke="#0891b2" stroke-width="1" stroke-dasharray="4,4" opacity="0.3"/>
+
+        <rect x="840" y="20" width="100" height="36" rx="6" fill="#ec4899" opacity="0.15" stroke="#ec4899"/>
+        <text x="890" y="43" text-anchor="middle" fill="#ec4899" font-weight="600" font-size="13">LLM API</text>
+        <line x1="890" y1="56" x2="890" y2="1050" stroke="#ec4899" stroke-width="1" stroke-dasharray="4,4" opacity="0.3"/>
+      </g>
+
+      <text x="40" y="80" fill="#1a1d27" font-size="11">① buildProgram()</text>
+      <line x1="120" y1="88" x2="330" y2="88" stroke="#6c5ce7" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+      <text x="40" y="115" fill="#1a1d27" font-size="11">② 解析参数 question + --llm</text>
+      <rect x="320" y="125" width="20" height="16" fill="#3b82f6" opacity="0.15" rx="3"/>
+
+      <text x="40" y="165" fill="#1a1d27" font-size="11">③ withRepo → BrainDb.connect()</text>
+      <line x1="330" y1="173" x2="550" y2="173" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+      <text x="40" y="200" fill="#1a1d27" font-size="11">③.1 初始化 SeekDB + SQL Schema</text>
+      <line x1="550" y1="208" x2="770" y2="208" stroke="#10b981" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+      <text x="40" y="235" fill="#1a1d27" font-size="11">③.2 getOrCreateCollection + Embedding</text>
+      <line x1="550" y1="243" x2="770" y2="243" stroke="#10b981" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <line x1="770" y1="258" x2="550" y2="258" stroke="#0891b2" stroke-width="1" marker-end="url(#arrow)" opacity="0.4"/>
+
+      <text x="40" y="295" fill="#1a1d27" font-size="11">④ repo.query("统计企业的AI需求", 10)</text>
+      <line x1="330" y1="303" x2="550" y2="303" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+      <text x="40" y="330" fill="#1a1d27" font-size="11">④.1 sanitizeQuery()</text>
+      <rect x="540" y="338" width="20" height="16" fill="#10b981" opacity="0.15" rx="3"/>
+
+      <text x="40" y="365" fill="#1a1d27" font-size="11">④.2 pagesCollection.query(queryTexts)</text>
+      <line x1="550" y1="373" x2="770" y2="373" stroke="#10b981" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+      <text x="40" y="400" fill="#1a1d27" font-size="11">④.3 评分: vectorScore × 0.85 + freshness + typeBoost</text>
+      <rect x="540" y="408" width="20" height="16" fill="#10b981" opacity="0.15" rx="3"/>
+
+      <text x="40" y="435" fill="#1a1d27" font-size="11">④.4 返回 SearchHit[] (按 score 排序)</text>
+      <line x1="550" y1="443" x2="330" y2="443" stroke="#10b981" stroke-width="1" marker-end="url(#arrow)" opacity="0.4"/>
+
+      <text x="40" y="480" fill="#1a1d27" font-size="11">⑤ loadSettings() → 解析 LLM 配置</text>
+      <rect x="320" y="488" width="20" height="16" fill="#3b82f6" opacity="0.15" rx="3"/>
+
+      <text x="40" y="525" fill="#1a1d27" font-size="11">⑥ collectContextForLLM(repo, topHits, question, 100K)</text>
+      <line x1="330" y1="533" x2="550" y2="533" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+      <text x="40" y="565" fill="#3b82f6" font-size="11">⑥.1 Layer 1: Primary Pages</text>
+      <line x1="550" y1="573" x2="770" y2="573" stroke="#10b981" stroke-width="1" marker-end="url(#arrow)" opacity="0.4"/>
+      <text x="560" y="590" fill="#6b7280" font-size="10">getPage() → compiledTruth + timeline</text>
+
+      <text x="40" y="615" fill="#d97706" font-size="11">⑥.2 Layer 2: Raw Documents</text>
+      <line x1="550" y1="623" x2="770" y2="623" stroke="#10b981" stroke-width="1" marker-end="url(#arrow)" opacity="0.4"/>
+      <text x="560" y="640" fill="#6b7280" font-size="10">readRaw() → 原始 JSON/文本</text>
+
+      <text x="40" y="665" fill="#10b981" font-size="11">⑥.3 Layer 3: Linked Pages</text>
+      <line x1="550" y1="673" x2="770" y2="673" stroke="#10b981" stroke-width="1" marker-end="url(#arrow)" opacity="0.4"/>
+      <text x="560" y="690" fill="#6b7280" font-size="10">outgoingLinks() + backlinks() → keyword score → getPage()</text>
+
+      <text x="40" y="720" fill="#1a1d27" font-size="11">⑥.4 返回 { sections, totalChars, stats }</text>
+      <line x1="550" y1="728" x2="330" y2="728" stroke="#10b981" stroke-width="1" marker-end="url(#arrow)" opacity="0.4"/>
+
+      <text x="40" y="770" fill="#1a1d27" font-size="11">⑦ generateAnswerWithStream(question, sections, llm)</text>
+      <line x1="330" y1="778" x2="890" y2="778" stroke="#ec4899" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+      <text x="40" y="805" fill="#1a1d27" font-size="11">⑦.1 构建 prompt (system + user + context sections)</text>
+      <rect x="880" y="813" width="20" height="16" fill="#ec4899" opacity="0.15" rx="3"/>
+
+      <text x="40" y="840" fill="#1a1d27" font-size="11">⑦.2 POST /chat/completions (stream=true)</text>
+      <rect x="880" y="848" width="20" height="24" fill="#ec4899" opacity="0.15" rx="3"/>
+
+      <text x="40" y="885" fill="#ec4899" font-size="11">⑦.3 SSE 流式读取 → stdout 逐字输出</text>
+      <line x1="890" y1="893" x2="330" y2="893" stroke="#ec4899" stroke-width="1" marker-end="url(#arrow)" opacity="0.4" stroke-dasharray="4,4"/>
+
+      <text x="40" y="935" fill="#1a1d27" font-size="11">⑧ 输出 Sources 列表 + 统计信息</text>
+      <rect x="320" y="943" width="20" height="16" fill="#3b82f6" opacity="0.15" rx="3"/>
+
+      <text x="40" y="980" fill="#1a1d27" font-size="11">⑨ process.exit(0)</text>
+      <line x1="330" y1="988" x2="120" y2="988" stroke="#6c5ce7" stroke-width="1" marker-end="url(#arrow)" opacity="0.4"/>
+
+      <line x1="30" y1="75" x2="30" y2="1000" stroke="#e0e4ea" stroke-width="1"/>
+
+      <g transform="translate(30, 1020)">
+        <rect x="0" y="0" width="900" height="36" rx="6" fill="#e8eaf0" stroke="#e0e4ea"/>
+        <text x="450" y="23" text-anchor="middle" fill="#6b7280" font-size="11">
+          超时: AbortSignal.timeout(30_000)  |  温度: 0.3  |  max_tokens: 4096  |  thinking: disabled
+        </text>
+      </g>
+    </svg>
+  </div>
+
+  <!-- Detail Cards -->
+  <div class="section-title">📋 各阶段详解</div>
+  <div class="detail-grid">
+
+    <div class="detail-card">
+      <div class="card-header" onclick="toggleCard(this)"><span class="badge entry">入口</span><h3>阶段 1 — CLI 入口 & 参数解析</h3><span class="toggle">▼</span></div>
+      <div class="card-body">
+        <div class="sub-steps">
+          <div class="sub-step">
+            <div class="ss-num">1</div><div class="ss-content"><h4>程序启动</h4><p><code>cli.ts</code> 调用 <code>buildProgram()</code> 构建 Commander 程序，注册所有子命令，读取 <code>package.json</code> 版本号。</p></div>
+          </div>
+          <div class="sub-step">
+            <div class="ss-num">2</div><div class="ss-content"><h4>参数解析</h4><p><code>question = "统计企业的AI需求"</code>，<code>opts.llm = true</code>，<code>limit = 10</code>，<code>contextLimit = 5</code>。</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="detail-card">
+      <div class="card-header" onclick="toggleCard(this)"><span class="badge db">数据库</span><h3>阶段 2 — 连接数据库 & 初始化仓库</h3><span class="toggle">▼</span></div>
+      <div class="card-body">
+        <div class="sub-steps">
+          <div class="sub-step">
+            <div class="ss-num">1</div><div class="ss-content"><h4>BrainDb.connect()</h4><p>嵌入式/远程 SeekDB，执行 <code>SELECT 1</code> 验证，创建 SQL Schema 表和向量集合。</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="detail-card">
+      <div class="card-header" onclick="toggleCard(this)"><span class="badge search">检索</span><h3>阶段 3 — 语义向量检索</h3><span class="toggle">▼</span></div>
+      <div class="card-body">
+        <div class="sub-steps">
+          <div class="sub-step">
+            <div class="ss-num">1</div><div class="ss-content"><h4>混合评分</h4><p>向量相似度 × 0.85 + 新鲜度加成 + <strong>类型加成</strong>（本体类型直接影响排名）。</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="detail-card">
+      <div class="card-header" onclick="toggleCard(this)"><span class="badge context">上下文</span><h3>阶段 4 — 构建 LLM 上下文（三层采集）</h3><span class="toggle">▼</span></div>
+      <div class="card-body">
+        <div class="layer-diagram">
+          <div class="layer"><div class="l-color"></div><div class="l-icon">📄</div><div class="l-name">Layer 1</div><div class="l-desc"><strong>Primary Pages</strong> — compiledTruth + timeline</div></div>
+          <div class="layer"><div class="l-color"></div><div class="l-icon">📎</div><div class="l-name">Layer 2</div><div class="l-desc"><strong>Raw Documents</strong> — 原始文档内容</div></div>
+          <div class="layer"><div class="l-color"></div><div class="l-icon">🔗</div><div class="l-name">Layer 3</div><div class="l-desc"><strong>Linked Pages</strong> — 关系图扩展（本体关系驱动）</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="detail-card">
+      <div class="card-header" onclick="toggleCard(this)"><span class="badge llm">LLM</span><h3>阶段 5 — LLM 流式生成回答</h3><span class="toggle">▼</span></div>
+      <div class="card-body">
+        <div class="sub-steps">
+          <div class="sub-step">
+            <div class="ss-num">1</div><div class="ss-content"><h4>Prompt 构建 + SSE 流式</h4><p>三段式上下文 + <code>[[slug|标题]]</code> 溯源格式，stream=true 逐字输出。</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="detail-card">
+      <div class="card-header" onclick="toggleCard(this)"><span class="badge output">输出</span><h3>阶段 6 — 结果输出 & 退出</h3><span class="toggle">▼</span></div>
+      <div class="card-body">
+        <div class="sub-steps">
+          <div class="sub-step">
+            <div class="ss-num">1</div><div class="ss-content"><h4>来源列表 + 统计</h4><p>📄📎🔗 图标标注来源类型，slug 携带本体语义。</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Key Design Points -->
+  <div class="section-title">💡 关键设计要点</div>
+  <div class="detail-grid">
+    <div class="detail-card">
+      <div class="card-body open" style="padding: 20px;">
+        <div class="sub-steps">
+          <div class="sub-step" style="border-left-color: var(--violet);">
+            <div class="ss-num" style="background: var(--violet);">1</div>
+            <div class="ss-content">
+              <h4>本体建模是核心骨架</h4>
+              <p>从写入（自动抽取实体关系）到检索（类型加成排序）到上下文（关系图扩展）到回答（溯源引用），本体贯穿全链路，将散落的文本转化为可推理的知识图谱。</p>
+            </div>
+          </div>
+          <div class="sub-step" style="border-left-color: var(--blue);">
+            <div class="ss-num" style="background: var(--blue);">2</div>
+            <div class="ss-content">
+              <h4>三层上下文采集</h4>
+              <p>Primary → Raw → Linked 的渐进式采集，Linked pages 通过关系图自动发现关联知识。</p>
+            </div>
+          </div>
+          <div class="sub-step" style="border-left-color: var(--orange);">
+            <div class="ss-num" style="background: var(--orange);">3</div>
+            <div class="ss-content">
+              <h4>预算截断机制</h4>
+              <p>100K 字符上限，自动截断防 token 超限。</p>
+            </div>
+          </div>
+          <div class="sub-step" style="border-left-color: var(--green);">
+            <div class="ss-num" style="background: var(--green);">4</div>
+            <div class="ss-content">
+              <h4>混合评分模型</h4>
+              <p>向量 × 0.85 + 新鲜度 + 类型加成，兼顾语义匹配和时效性。</p>
+            </div>
+          </div>
+          <div class="sub-step" style="border-left-color: var(--pink);">
+            <div class="ss-num" style="background: var(--pink);">5</div>
+            <div class="ss-content">
+              <h4>来源溯源 + 消歧对齐</h4>
+              <p>[[slug|标题]] 引用 + findSimilarSlug 语义消歧，保证知识可验证、不重复。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">
+  Generated from ex-brain source code · <code>ebrain query --llm</code> execution flow · 本体建模驱动的知识图谱 · 2026
+</div>
+
+<script>
+function toggleCard(header) {
+  const body = header.nextElementSibling;
+  const toggle = header.querySelector('.toggle');
+  body.classList.toggle('open');
+  toggle.classList.toggle('open');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const firstCard = document.querySelector('.detail-card');
+  if (firstCard) {
+    const header = firstCard.querySelector('.card-header');
+    toggleCard(header);
+  }
+});
+</script>
+</body>
+</html>

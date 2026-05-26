@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ex-brain · C4 Level 4 — Code</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root,[data-theme="dark"]{--bg:#020617;--grid:#1e293b;--text:#ffffff;--text-muted:#94a3b8;--text-dim:#475569;--panel:rgba(15,23,42,0.5);--panel-border:#1e293b;--lane-fill:rgba(15,23,42,0.22);--lane-stroke:#334155;--arrow:#64748b;--arrow-emphasis:#34d399;--mask:#0f172a;--frontend-fill:rgba(8,51,68,0.4);--frontend-stroke:#22d3ee;--backend-fill:rgba(6,78,59,0.4);--backend-stroke:#34d399;--database-fill:rgba(76,29,149,0.4);--database-stroke:#a78bfa;--cloud-fill:rgba(120,53,15,0.3);--cloud-stroke:#fbbf24;--security-fill:rgba(136,19,55,0.4);--security-stroke:#fb7185;--messagebus-fill:rgba(251,146,60,0.3);--messagebus-stroke:#fb923c;--external-fill:rgba(30,41,59,0.5);--external-stroke:#94a3b8;--toolbar-bg:rgba(15,23,42,0.8);--toolbar-border:#334155;--toolbar-text:#e2e8f0;--toolbar-hover:rgba(15,23,42,0.95);--toolbar-menu-bg:#0f172a}[data-theme="light"]{--bg:#f8fafc;--grid:#e2e8f0;--text:#0f172a;--text-muted:#64748b;--text-dim:#94a3b8;--panel:#ffffff;--panel-border:#e2e8f0;--lane-fill:rgba(248,250,252,0.65);--lane-stroke:#cbd5e1;--arrow:#94a3b8;--arrow-emphasis:#059669;--mask:#ffffff;--frontend-fill:rgba(34,211,238,0.15);--frontend-stroke:#0891b2;--backend-fill:rgba(52,211,153,0.18);--backend-stroke:#059669;--database-fill:rgba(167,139,250,0.2);--database-stroke:#7c3aed;--cloud-fill:rgba(251,191,36,0.18);--cloud-stroke:#d97706;--security-fill:rgba(251,113,133,0.15);--security-stroke:#e11d48;--messagebus-fill:rgba(251,146,60,0.15);--messagebus-stroke:#ea580c;--external-fill:rgba(148,163,184,0.18);--external-stroke:#64748b;--toolbar-bg:rgba(255,255,255,0.92);--toolbar-border:#cbd5e1;--toolbar-text:#334155;--toolbar-hover:#ffffff;--toolbar-menu-bg:#ffffff}
+    *{margin:0;padding:0;box-sizing:border-box}body{font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--bg);min-height:100vh;padding:2rem;color:var(--text);transition:background .2s ease,color .2s ease}.container{max-width:1200px;margin:0 auto}.header{margin-bottom:2rem}.header-row{display:flex;align-items:center;gap:1rem;margin-bottom:.5rem}.pulse-dot{width:12px;height:12px;background:var(--frontend-stroke);border-radius:50%;animation:pulse 2s infinite}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}h1{font-size:1.5rem;font-weight:700;letter-spacing:-.025em}.subtitle{color:var(--text-muted);font-size:.875rem;margin-left:1.75rem}.diagram-container{background:var(--panel);border-radius:1rem;border:1px solid var(--panel-border);padding:1.5rem;overflow-x:auto}svg{width:100%;min-width:min(900px,100%);display:block}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;margin-top:2rem}.card{background:var(--panel);border-radius:.75rem;border:1px solid var(--panel-border);padding:1.25rem}.card-header{display:flex;align-items:center;gap:.5rem;margin-bottom:.75rem}.card-dot{width:8px;height:8px;border-radius:50%}.card-dot.cyan{background:var(--frontend-stroke)}.card-dot.emerald{background:var(--backend-stroke)}.card-dot.violet{background:var(--database-stroke)}.card-dot.amber{background:var(--cloud-stroke)}.card-dot.rose{background:var(--security-stroke)}.card-dot.orange{background:var(--messagebus-stroke)}.card-dot.slate{background:var(--external-stroke)}.card h3{font-size:.875rem;font-weight:600;color:var(--text)}.card ul{list-style:none;color:var(--text-muted);font-size:.75rem}.card li{margin-bottom:.375rem}.footer{text-align:center;margin-top:1.5rem;color:var(--text-dim);font-size:.75rem}.toolbar{position:fixed;top:1rem;right:1rem;display:flex;gap:.5rem;z-index:100}.toolbar button{background:var(--toolbar-bg);color:var(--toolbar-text);border:1px solid var(--toolbar-border);padding:.5rem .875rem;border-radius:.5rem;font-family:inherit;font-size:.75rem;font-weight:500;cursor:pointer;backdrop-filter:blur(8px);transition:background .15s,border-color .15s;display:inline-flex;align-items:center;gap:.375rem}.toolbar button:hover{background:var(--toolbar-hover);border-color:var(--arrow)}.toolbar .export-wrap{position:relative}.toolbar .export-menu{position:absolute;top:calc(100% + .375rem);right:0;background:var(--toolbar-menu-bg);border:1px solid var(--toolbar-border);border-radius:.5rem;padding:.375rem;min-width:160px;display:none;flex-direction:column;box-shadow:0 4px 20px rgba(0,0,0,.25)}.toolbar .export-menu.open{display:flex}.toolbar .export-menu button{background:transparent;border:0;justify-content:space-between;width:100%;text-align:left;padding:.5rem .75rem}.toolbar .export-menu button:hover{background:var(--toolbar-hover)}.toolbar .export-menu .hint{color:var(--text-dim);font-size:.625rem}.toolbar .export-menu hr{border:0;border-top:1px solid var(--toolbar-border);margin:.25rem .375rem;opacity:.5}.archify-toast{position:fixed;top:1rem;left:50%;transform:translateX(-50%) translateY(-8px);background:var(--toolbar-menu-bg);color:var(--text);border:1px solid var(--toolbar-border);padding:.5rem 1rem;border-radius:.5rem;font-family:inherit;font-size:.75rem;opacity:0;transition:opacity .2s,transform .2s;z-index:200;pointer-events:none;box-shadow:0 4px 20px rgba(0,0,0,.25)}.archify-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}@media(max-width:720px){body{padding:1rem}.toolbar{position:static;justify-content:flex-end;margin-bottom:1rem}.header{margin-bottom:1.25rem}.header-row{gap:.75rem;align-items:flex-start}h1{font-size:1.25rem;line-height:1.25}.subtitle{margin-left:0;font-size:.8125rem;line-height:1.55}.diagram-container{padding:.75rem;border-radius:.75rem}.cards{grid-template-columns:1fr;margin-top:1rem}}
+    .c-grid{stroke:var(--grid);fill:none}.c-mask{fill:var(--mask);stroke:none}.c-frontend{fill:var(--frontend-fill);stroke:var(--frontend-stroke)}.c-backend{fill:var(--backend-fill);stroke:var(--backend-stroke)}.c-database{fill:var(--database-fill);stroke:var(--database-stroke)}.c-cloud{fill:var(--cloud-fill);stroke:var(--cloud-stroke)}.c-security{fill:var(--security-fill);stroke:var(--security-stroke)}.c-messagebus{fill:var(--messagebus-fill);stroke:var(--messagebus-stroke)}.c-external{fill:var(--external-fill);stroke:var(--external-stroke)}.t-primary{fill:var(--text)}.t-muted{fill:var(--text-muted)}.t-dim{fill:var(--text-dim)}.t-frontend{fill:var(--frontend-stroke)}.t-backend{fill:var(--backend-stroke)}.t-database{fill:var(--database-stroke)}.t-cloud{fill:var(--cloud-stroke)}.t-security{fill:var(--security-stroke)}.t-messagebus{fill:var(--messagebus-stroke)}.t-external{fill:var(--external-stroke)}.a-default{stroke:var(--arrow);fill:none}.a-emphasis{stroke:var(--arrow-emphasis);fill:none}.a-security{stroke:var(--security-stroke);fill:none;stroke-dasharray:5,5}.a-dashed{stroke:var(--database-stroke);fill:none;stroke-dasharray:4,4}.m-default{fill:var(--arrow)}.m-emphasis{fill:var(--arrow-emphasis)}.m-security{fill:var(--security-stroke)}.m-dashed{fill:var(--database-stroke)}.c-security-group{fill:transparent;stroke:var(--security-stroke);stroke-dasharray:4,4}.c-region{fill:rgba(251,191,36,0.05);stroke:var(--cloud-stroke);stroke-dasharray:8,4}.c-lane{fill:var(--lane-fill);stroke:var(--lane-stroke);stroke-dasharray:6,6}
+    /* Code-level: interface/class boxes */
+    .c-interface{fill:var(--frontend-fill);stroke:var(--frontend-stroke);stroke-dasharray:4,3}
+    .c-enum{fill:var(--messagebus-fill);stroke:var(--messagebus-stroke);stroke-dasharray:3,2}
+    .c-fn{fill:var(--database-fill);stroke:var(--database-stroke)}
+  </style>
+</head>
+<body>
+  <div class="toolbar" role="toolbar" aria-label="Diagram actions">
+    <button id="btn-theme" type="button" title="Toggle theme (T)" aria-label="Toggle color theme" aria-pressed="false">
+      <span id="theme-icon" aria-hidden="true">&#9790;</span><span id="theme-label">Dark</span>
+    </button>
+    <div class="export-wrap">
+      <button id="btn-export" type="button" title="Export diagram (E)" aria-label="Export diagram" aria-haspopup="menu" aria-expanded="false" aria-controls="export-menu">
+        Export <span aria-hidden="true">&#9662;</span>
+      </button>
+      <div class="export-menu" id="export-menu" role="menu" aria-label="Export">
+        <button data-action="copy" type="button" role="menuitem" tabindex="-1">Copy to clipboard <span class="hint">PNG</span></button><hr role="separator" aria-hidden="true">
+        <button data-format="png" type="button" role="menuitem" tabindex="-1">Download PNG</button>
+        <button data-format="jpeg" type="button" role="menuitem" tabindex="-1">Download JPEG</button>
+        <button data-format="webp" type="button" role="menuitem" tabindex="-1">Download WebP</button><hr role="separator" aria-hidden="true">
+        <button data-format="svg" type="button" role="menuitem" tabindex="-1">Download SVG <span class="hint">vector</span></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>ex-brain · C4 Level 4 — Code</h1>
+      </div>
+      <p class="subtitle">核心类、接口和关键函数的依赖关系</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1000 740">
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" class="m-default"/></marker>
+          <marker id="arrowhead-emphasis" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" class="m-emphasis"/></marker>
+          <marker id="arrowhead-security" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" class="m-security"/></marker>
+          <marker id="arrowhead-dashed" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" class="m-dashed"/></marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" class="c-grid" stroke-width="0.5"/></pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#grid)"/>
+
+        <!-- ===== Types / Interfaces (top) ===== -->
+        <rect x="20" y="10" width="300" height="180" rx="10" fill="rgba(34,211,238,0.03)" stroke="var(--frontend-stroke)" stroke-dasharray="6,4" stroke-width="1"/>
+        <text x="32" y="28" class="t-frontend" font-size="9" font-weight="600">src/types/index.ts</text>
+
+        <!-- PageRecord -->
+        <rect x="35" y="40" width="120" height="65" rx="4" class="c-mask"/>
+        <rect x="35" y="40" width="120" height="65" rx="4" class="c-frontend" stroke-width="1.5"/>
+        <text x="95" y="60" class="t-primary" font-size="10" font-weight="600" text-anchor="middle">«interface»</text>
+        <text x="95" y="76" class="t-frontend" font-size="11" font-weight="700" text-anchor="middle">PageRecord</text>
+        <text x="95" y="92" class="t-dim" font-size="7" text-anchor="middle">slug/type/title/compiledTruth/</text>
+
+        <!-- TimelineEntry -->
+        <rect x="170" y="40" width="120" height="65" rx="4" class="c-mask"/>
+        <rect x="170" y="40" width="120" height="65" rx="4" class="c-frontend" stroke-width="1.5"/>
+        <text x="230" y="60" class="t-primary" font-size="10" font-weight="600" text-anchor="middle">«interface»</text>
+        <text x="230" y="76" class="t-frontend" font-size="11" font-weight="700" text-anchor="middle">TimelineEntry</text>
+        <text x="230" y="92" class="t-dim" font-size="7" text-anchor="middle">date/source/summary/</text>
+
+        <!-- EntityRelation -->
+        <rect x="35" y="118" width="120" height="65" rx="4" class="c-mask"/>
+        <rect x="35" y="118" width="120" height="65" rx="4" class="c-frontend" stroke-width="1.5"/>
+        <text x="95" y="138" class="t-primary" font-size="10" font-weight="600" text-anchor="middle">«interface»</text>
+        <text x="95" y="154" class="t-frontend" font-size="11" font-weight="700" text-anchor="middle">EntityRelation</text>
+        <text x="95" y="170" class="t-dim" font-size="7" text-anchor="middle">fromSlug/toSlug/context</text>
+
+        <!-- SearchHit -->
+        <rect x="170" y="118" width="120" height="65" rx="4" class="c-mask"/>
+        <rect x="170" y="118" width="120" height="65" rx="4" class="c-frontend" stroke-width="1.5"/>
+        <text x="230" y="138" class="t-primary" font-size="10" font-weight="600" text-anchor="middle">«interface»</text>
+        <text x="230" y="154" class="t-frontend" font-size="11" font-weight="700" text-anchor="middle">SearchHit</text>
+        <text x="230" y="170" class="t-dim" font-size="7" text-anchor="middle">score/slug/title/content</text>
+
+        <!-- ===== Database Layer (top-right) ===== -->
+        <rect x="350" y="10" width="280" height="180" rx="10" fill="rgba(167,139,250,0.04)" stroke="var(--database-stroke)" stroke-dasharray="6,4" stroke-width="1"/>
+        <text x="362" y="28" class="t-database" font-size="9" font-weight="600">src/db/</text>
+
+        <!-- BrainDb -->
+        <rect x="370" y="40" width="120" height="65" rx="4" class="c-mask"/>
+        <rect x="370" y="40" width="120" height="65" rx="4" class="c-database" stroke-width="1.5"/>
+        <text x="430" y="60" class="t-primary" font-size="10" font-weight="600" text-anchor="middle">«class»</text>
+        <text x="430" y="76" class="t-database" font-size="11" font-weight="700" text-anchor="middle">BrainDb</text>
+        <text x="430" y="92" class="t-dim" font-size="7" text-anchor="middle">seekdb 连接封装</text>
+
+        <!-- SQL_SCHEMA -->
+        <rect x="505" y="40" width="105" height="65" rx="4" class="c-mask"/>
+        <rect x="505" y="40" width="105" height="65" rx="4" class="c-database" stroke-width="1.5"/>
+        <text x="557" y="60" class="t-primary" font-size="10" font-weight="600" text-anchor="middle">«const»</text>
+        <text x="557" y="76" class="t-database" font-size="11" font-weight="700" text-anchor="middle">SQL_SCHEMA</text>
+        <text x="557" y="92" class="t-dim" font-size="7" text-anchor="middle">6 张表 DDL</text>
+
+        <!-- DbError -->
+        <rect x="370" y="118" width="120" height="65" rx="4" class="c-mask"/>
+        <rect x="370" y="118" width="120" height="65" rx="4" class="c-database" stroke-width="1.5"/>
+        <text x="430" y="138" class="t-primary" font-size="10" font-weight="600" text-anchor="middle">«class»</text>
+        <text x="430" y="154" class="t-database" font-size="11" font-weight="700" text-anchor="middle">DbError</text>
+        <text x="430" y="170" class="t-dim" font-size="7" text-anchor="middle">wrapDbError / logDbError</text>
+
+        <!-- Error helpers -->
+        <rect x="505" y="118" width="105" height="65" rx="4" class="c-mask"/>
+        <rect x="505" y="118" width="105" height="65" rx="4" class="c-database" stroke-width="1.5"/>
+        <text x="557" y="138" class="t-primary" font-size="10" font-weight="600" text-anchor="middle">«module»</text>
+        <text x="557" y="154" class="t-database" font-size="11" font-weight="700" text-anchor="middle">errors.ts</text>
+        <text x="557" y="170" class="t-dim" font-size="7" text-anchor="middle">分类 / 可重试判定</text>
+
+        <!-- ===== BrainRepository (center) ===== -->
+        <rect x="30" y="210" width="370" height="220" rx="10" fill="rgba(52,211,153,0.04)" stroke="var(--backend-stroke)" stroke-dasharray="8,4" stroke-width="1.5"/>
+        <text x="42" y="228" class="t-backend" font-size="9" font-weight="700">src/repositories/brain-repo.ts</text>
+
+        <!-- BrainRepository class -->
+        <rect x="45" y="240" width="140" height="90" rx="6" class="c-mask"/>
+        <rect x="45" y="240" width="140" height="90" rx="6" class="c-backend" stroke-width="2"/>
+        <text x="115" y="262" class="t-primary" font-size="10" font-weight="600" text-anchor="middle">«class»</text>
+        <text x="115" y="280" class="t-backend" font-size="12" font-weight="700" text-anchor="middle">BrainRepository</text>
+        <text x="115" y="298" class="t-dim" font-size="7" text-anchor="middle">+ getPage/putPage/search</text>
+        <text x="115" y="310" class="t-dim" font-size="7" text-anchor="middle">+ query/timeline/link</text>
+        <text x="115" y="322" class="t-dim" font-size="7" text-anchor="middle">~1000 lines</text>
+
+        <!-- Key methods -->
+        <rect x="205" y="240" width="170" height="160" rx="6" class="c-mask"/>
+        <rect x="205" y="240" width="170" height="160" rx="6" class="c-backend" stroke-width="1.5"/>
+        <text x="290" y="258" class="t-primary" font-size="9" font-weight="600" text-anchor="middle">关键方法</text>
+        <text x="290" y="276" class="t-dim" font-size="7" text-anchor="middle">getPage() / putPage()</text>
+        <text x="290" y="290" class="t-dim" font-size="7" text-anchor="middle">search() / hybridSearch()</text>
+        <text x="290" y="304" class="t-dim" font-size="7" text-anchor="middle">query() / queryWithLLM()</text>
+        <text x="290" y="318" class="t-dim" font-size="7" text-anchor="middle">compilePage() / link()</text>
+        <text x="290" y="332" class="t-dim" font-size="7" text-anchor="middle">backlinks() / outgoingLinks()</text>
+        <text x="290" y="346" class="t-dim" font-size="7" text-anchor="middle">timelineAdd() / timelineGlobal()</text>
+        <text x="290" y="360" class="t-dim" font-size="7" text-anchor="middle">syncPageToSearch()</text>
+        <text x="290" y="374" class="t-dim" font-size="7" text-anchor="middle">tagAdd() / rawGet() / stats()</text>
+        <text x="290" y="388" class="t-dim" font-size="7" text-anchor="middle">importDir() / deletePage()</text>
+
+        <!-- ===== AI Engine (right-center) ===== -->
+        <rect x="430" y="210" width="540" height="220" rx="10" fill="rgba(251,191,36,0.04)" stroke="var(--cloud-stroke)" stroke-dasharray="8,4" stroke-width="1.5"/>
+        <text x="442" y="228" class="t-cloud" font-size="9" font-weight="700">src/ai/</text>
+
+        <!-- AIPipeline -->
+        <rect x="450" y="240" width="140" height="90" rx="6" class="c-mask"/>
+        <rect x="450" y="240" width="140" height="90" rx="6" class="c-cloud" stroke-width="2"/>
+        <text x="520" y="262" class="t-primary" font-size="10" font-weight="600" text-anchor="middle">«class»</text>
+        <text x="520" y="280" class="t-cloud" font-size="12" font-weight="700" text-anchor="middle">AIPipeline</text>
+        <text x="520" y="298" class="t-dim" font-size="7" text-anchor="middle">+ forward() / parse()</text>
+        <text x="520" y="310" class="t-dim" font-size="7" text-anchor="middle">+ transform() / fallback()</text>
+        <text x="520" y="322" class="t-dim" font-size="7" text-anchor="middle">@ax-llm/ax 适配</text>
+
+        <!-- compileTruth -->
+        <rect x="610" y="240" width="140" height="90" rx="6" class="c-mask"/>
+        <rect x="610" y="240" width="140" height="90" rx="6" class="c-cloud" stroke-width="1.5"/>
+        <text x="680" y="262" class="t-primary" font-size="10" font-weight="600" text-anchor="middle">«fn»</text>
+        <text x="680" y="280" class="t-cloud" font-size="12" font-weight="700" text-anchor="middle">compileTruth()</text>
+        <text x="680" y="298" class="t-dim" font-size="7" text-anchor="middle">CompileInput → CompileResult</text>
+        <text x="680" y="312" class="t-dim" font-size="7" text-anchor="middle">changeType: append/update/</text>
+        <text x="680" y="322" class="t-dim" font-size="7" text-anchor="middle">replace/conflict/none</text>
+
+        <!-- extractTimelineEvents -->
+        <rect x="770" y="240" width="140" height="90" rx="6" class="c-mask"/>
+        <rect x="770" y="240" width="140" height="90" rx="6" class="c-cloud" stroke-width="1.5"/>
+        <text x="840" y="262" class="t-primary" font-size="10" font-weight="600" text-anchor="middle">«fn»</text>
+        <text x="840" y="280" class="t-cloud" font-size="12" font-weight="700" text-anchor="middle">extractTimeline()</text>
+        <text x="840" y="298" class="t-dim" font-size="7" text-anchor="middle">text → TimelineEntry[]</text>
+        <text x="840" y="312" class="t-dim" font-size="7" text-anchor="middle">normalizeDate() 日期归一化</text>
+
+        <!-- extractRelations -->
+        <rect x="450" y="350" width="140" height="70" rx="6" class="c-mask"/>
+        <rect x="450" y="350" width="140" height="70" rx="6" class="c-cloud" stroke-width="1.5"/>
+        <text x="520" y="378" class="t-primary" font-size="10" font-weight="600" text-anchor="middle">«fn»</text>
+        <text x="520" y="396" class="t-cloud" font-size="12" font-weight="700" text-anchor="middle">extractRelations()</text>
+        <text x="520" y="410" class="t-dim" font-size="7" text-anchor="middle">text → EntityRelation[]</text>
+
+        <!-- Embedding Factory -->
+        <rect x="610" y="350" width="140" height="70" rx="6" class="c-mask"/>
+        <rect x="610" y="350" width="140" height="70" rx="6" class="c-database" stroke-width="1.5"/>
+        <text x="680" y="378" class="t-primary" font-size="10" font-weight="600" text-anchor="middle">«fn»</text>
+        <text x="680" y="396" class="t-database" font-size="12" font-weight="700" text-anchor="middle">createEmbedding()</text>
+        <text x="680" y="410" class="t-dim" font-size="7" text-anchor="middle">Hash / OpenAI Compatible</text>
+
+        <!-- HashEmbedding -->
+        <rect x="770" y="350" width="140" height="70" rx="6" class="c-mask"/>
+        <rect x="770" y="350" width="140" height="70" rx="6" class="c-database" stroke-width="1.5"/>
+        <text x="840" y="378" class="t-primary" font-size="10" font-weight="600" text-anchor="middle">«class»</text>
+        <text x="840" y="396" class="t-database" font-size="12" font-weight="700" text-anchor="middle">LocalHashEmbedding</text>
+        <text x="840" y="410" class="t-dim" font-size="7" text-anchor="middle">确定性本地向量</text>
+
+        <!-- ===== CLI / Commands (bottom-left) ===== -->
+        <rect x="30" y="460" width="440" height="200" rx="10" fill="rgba(34,211,238,0.03)" stroke="var(--frontend-stroke)" stroke-dasharray="6,4" stroke-width="1"/>
+        <text x="42" y="478" class="t-frontend" font-size="9" font-weight="700">src/commands/</text>
+
+        <!-- buildProgram -->
+        <rect x="45" y="490" width="130" height="70" rx="6" class="c-mask"/>
+        <rect x="45" y="490" width="130" height="70" rx="6" class="c-frontend" stroke-width="1.5"/>
+        <text x="110" y="515" class="t-primary" font-size="10" font-weight="600" text-anchor="middle">«fn»</text>
+        <text x="110" y="533" class="t-frontend" font-size="12" font-weight="700" text-anchor="middle">buildProgram()</text>
+        <text x="110" y="550" class="t-dim" font-size="7" text-anchor="middle">Commander.js 注册</text>
+
+        <!-- Command groups -->
+        <rect x="195" y="490" width="120" height="150" rx="6" class="c-mask"/>
+        <rect x="195" y="490" width="120" height="150" rx="6" class="c-frontend" stroke-width="1"/>
+        <text x="255" y="510" class="t-primary" font-size="8" font-weight="600" text-anchor="middle">Commands</text>
+        <text x="255" y="528" class="t-dim" font-size="7" text-anchor="middle">put-cmd.ts</text>
+        <text x="255" y="542" class="t-dim" font-size="7" text-anchor="middle">query-cmd.ts</text>
+        <text x="255" y="556" class="t-dim" font-size="7" text-anchor="middle">compile-cmd.ts</text>
+        <text x="255" y="570" class="t-dim" font-size="7" text-anchor="middle">timeline-cmd.ts</text>
+        <text x="255" y="584" class="t-dim" font-size="7" text-anchor="middle">entity-links.ts</text>
+        <text x="255" y="598" class="t-dim" font-size="7" text-anchor="middle">graph-cmd.ts</text>
+        <text x="255" y="612" class="t-dim" font-size="7" text-anchor="middle">import-cmd.ts</text>
+        <text x="255" y="626" class="t-dim" font-size="7" text-anchor="middle">misc-cmds.ts</text>
+
+        <!-- Shared -->
+        <rect x="335" y="490" width="120" height="150" rx="6" class="c-mask"/>
+        <rect x="335" y="490" width="120" height="150" rx="6" class="c-messagebus" stroke-width="1"/>
+        <text x="395" y="510" class="t-primary" font-size="8" font-weight="600" text-anchor="middle">Shared Utils</text>
+        <text x="395" y="528" class="t-dim" font-size="7" text-anchor="middle">shared.ts</text>
+        <text x="395" y="542" class="t-dim" font-size="7" text-anchor="middle">cli-output.ts</text>
+        <text x="395" y="556" class="t-dim" font-size="7" text-anchor="middle">progress.ts</text>
+        <text x="395" y="570" class="t-dim" font-size="7" text-anchor="middle">query-sanitizer.ts</text>
+        <text x="395" y="584" class="t-dim" font-size="7" text-anchor="middle">slug-utils.ts</text>
+        <text x="395" y="598" class="t-dim" font-size="7" text-anchor="middle">document-loader.ts</text>
+        <text x="395" y="612" class="t-dim" font-size="7" text-anchor="middle">parser.ts / io.ts</text>
+
+        <!-- ===== MCP Server (bottom-right) ===== -->
+        <rect x="500" y="460" width="470" height="200" rx="10" fill="rgba(52,211,153,0.04)" stroke="var(--backend-stroke)" stroke-dasharray="6,4" stroke-width="1"/>
+        <text x="512" y="478" class="t-backend" font-size="9" font-weight="700">src/mcp/server.ts</text>
+
+        <!-- McpServer -->
+        <rect x="520" y="490" width="160" height="70" rx="6" class="c-mask"/>
+        <rect x="520" y="490" width="160" height="70" rx="6" class="c-backend" stroke-width="1.5"/>
+        <text x="600" y="518" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">MCP Server</text>
+        <text x="600" y="536" class="t-muted" font-size="8" text-anchor="middle">@modelcontextprotocol/sdk</text>
+        <text x="600" y="550" class="t-dim" font-size="7" text-anchor="middle">StdioServerTransport</text>
+
+        <!-- MCP Tools list -->
+        <rect x="700" y="490" width="240" height="155" rx="6" class="c-mask"/>
+        <rect x="700" y="490" width="240" height="155" rx="6" class="c-backend" stroke-width="1"/>
+        <text x="820" y="510" class="t-primary" font-size="8" font-weight="600" text-anchor="middle">20+ MCP Tools</text>
+        <text x="820" y="528" class="t-dim" font-size="7" text-anchor="middle">brain_get / brain_put / brain_delete</text>
+        <text x="820" y="542" class="t-dim" font-size="7" text-anchor="middle">brain_search / brain_query</text>
+        <text x="820" y="556" class="t-dim" font-size="7" text-anchor="middle">brain_compile / brain_smart_ingest</text>
+        <text x="820" y="570" class="t-dim" font-size="7" text-anchor="middle">brain_ingest / brain_ingest_document</text>
+        <text x="820" y="584" class="t-dim" font-size="7" text-anchor="middle">brain_link / brain_backlinks</text>
+        <text x="820" y="598" class="t-dim" font-size="7" text-anchor="middle">brain_timeline (+ add/extract/delete)</text>
+        <text x="820" y="612" class="t-dim" font-size="7" text-anchor="middle">brain_tag (+ add/remove) / brain_tags</text>
+        <text x="820" y="626" class="t-dim" font-size="7" text-anchor="middle">brain_list / brain_stats / brain_raw</text>
+
+        <!-- ===== Arrows ===== -->
+        <!-- BrainRepository → BrainDb -->
+        <line x1="185" y1="240" x2="410" y2="105" class="a-emphasis" stroke-width="1.5" marker-end="url(#arrowhead-emphasis)"/>
+        <rect x="260" y="155" width="50" height="14" rx="4" class="c-mask"/>
+        <text x="285" y="165" class="t-muted" font-size="7">使用</text>
+
+        <!-- BrainRepository → Types -->
+        <line x1="45" y1="240" x2="95" y2="190" class="a-default" stroke-width="1" marker-end="url(#arrowhead)"/>
+
+        <!-- BrainRepository → AI Engine -->
+        <line x1="400" y1="320" x2="448" y2="320" class="a-emphasis" stroke-width="1.5" marker-end="url(#arrowhead-emphasis)"/>
+        <rect x="408" y="306" width="50" height="14" rx="4" class="c-mask"/>
+        <text x="433" y="316" class="t-muted" font-size="7">调用</text>
+
+        <!-- AIPipeline → compileTruth -->
+        <line x1="590" y1="285" x2="608" y2="285" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+        <!-- compileTruth → extractTimeline (via pipeline) -->
+        <line x1="750" y1="285" x2="768" y2="285" class="a-dashed" stroke-width="1" marker-end="url(#arrowhead-dashed)"/>
+        <rect x="745" y="270" width="40" height="14" rx="4" class="c-mask"/>
+        <text x="765" y="280" class="t-dim" font-size="7">时间线</text>
+
+        <!-- extractRelations → BrainRepository (link) -->
+        <line x1="520" y1="420" x2="300" y2="430" class="a-dashed" stroke-width="1" marker-end="url(#arrowhead-dashed)"/>
+        <rect x="380" y="415" width="50" height="14" rx="4" class="c-mask"/>
+        <text x="405" y="425" class="t-dim" font-size="7">关系写入</text>
+
+        <!-- Embedding → BrainRepository -->
+        <line x1="680" y1="420" x2="350" y2="430" class="a-dashed" stroke-width="1" marker-end="url(#arrowhead-dashed)"/>
+        <rect x="490" y="415" width="50" height="14" rx="4" class="c-mask"/>
+        <text x="515" y="425" class="t-dim" font-size="7">向量写入</text>
+
+        <!-- CLI → BrainRepository -->
+        <line x1="200" y1="490" x2="200" y2="430" class="a-emphasis" stroke-width="1.5" marker-end="url(#arrowhead-emphasis)"/>
+        <rect x="208" y="450" width="50" height="14" rx="4" class="c-mask"/>
+        <text x="233" y="460" class="t-muted" font-size="7">调用</text>
+
+        <!-- MCP → BrainRepository -->
+        <line x1="520" y1="520" x2="400" y2="430" class="a-emphasis" stroke-width="1.5" marker-end="url(#arrowhead-emphasis)"/>
+        <rect x="430" y="460" width="50" height="14" rx="4" class="c-mask"/>
+        <text x="455" y="470" class="t-muted" font-size="7">调用</text>
+
+        <!-- buildProgram → Commands -->
+        <line x1="175" y1="525" x2="193" y2="525" class="a-default" stroke-width="1" marker-end="url(#arrowhead)"/>
+
+        <!-- ===== Legend ===== -->
+        <text x="30" y="685" class="t-primary" font-size="9" font-weight="600">Legend</text>
+        <rect x="30" y="695" width="14" height="9" rx="2" class="c-frontend" stroke-width="1"/>
+        <text x="48" y="702" class="t-muted" font-size="7">Interface / Class</text>
+        <rect x="30" y="709" width="14" height="9" rx="2" class="c-backend" stroke-width="1"/>
+        <text x="48" y="716" class="t-muted" font-size="7">Class (Repository)</text>
+        <rect x="30" y="723" width="14" height="9" rx="2" class="c-cloud" stroke-width="1"/>
+        <text x="48" y="730" class="t-muted" font-size="7">Class (AI)</text>
+        <line x1="200" y1="702" x2="220" y2="702" class="a-emphasis" stroke-width="1.5" marker-end="url(#arrowhead-emphasis)"/>
+        <text x="224" y="705" class="t-muted" font-size="7">Uses</text>
+        <line x1="200" y1="723" x2="220" y2="723" class="a-dashed" stroke-width="1" marker-end="url(#arrowhead-dashed)"/>
+        <text x="224" y="726" class="t-muted" font-size="7">Calls / Writes</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-header"><div class="card-dot emerald"></div><h3>BrainRepository — 核心仓库</h3></div>
+        <ul>
+          <li>• ~1000 行 · 所有数据操作的唯一入口</li>
+          <li>• 依赖 BrainDb (seekdb) + Types 定义</li>
+          <li>• 调用 AI Engine 进行编译和提取</li>
+          <li>• 管理向量索引同步</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-dot amber"></div><h3>AI Engine — 智能处理</h3></div>
+        <ul>
+          <li>• AIPipeline: LLM 调用生命周期基类</li>
+          <li>• compileTruth(): 智能编译 (5 种 changeType)</li>
+          <li>• extractTimeline(): 事件抽取 + 日期归一化</li>
+          <li>• extractRelations(): 12 种实体关系抽取</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-dot cyan"></div><h3>CLI + MCP — 双入口</h3></div>
+        <ul>
+          <li>• CLI: Commander.js · 12+ 子命令</li>
+          <li>• MCP: 20+ tools · Stdio transport</li>
+          <li>• 两者都通过 BrainRepository 操作数据</li>
+          <li>• 共享 Markdown Parser 和 Document Loader</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="footer">ex-brain · C4 Model · Level 4: Code · 2026-05-21</p>
+  </div>
+
+  <script>
+    /* ============================================================
+       Theme toggle — persists to localStorage, respects system pref
+       ============================================================ */
+    var Archify = {};
+
+    Archify.theme = (function () {
+      var STORAGE_KEY = 'archify-theme';
+      var html = document.documentElement;
+      var btn = document.getElementById('btn-theme');
+      var icon = document.getElementById('theme-icon');
+      var label = document.getElementById('theme-label');
+
+      function resolveInitial() {
+        try {
+          var param = new URLSearchParams(window.location.search).get('theme');
+          if (param === 'light' || param === 'dark') return param;
+        } catch (_) {}
+        var saved = localStorage.getItem(STORAGE_KEY);
+        if (saved === 'light' || saved === 'dark') return saved;
+        return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      }
+
+      function apply(theme) {
+        html.setAttribute('data-theme', theme);
+        icon.textContent = theme === 'dark' ? '\u263E' : '\u263C';
+        label.textContent = theme === 'dark' ? 'Dark' : 'Light';
+        btn.setAttribute('aria-pressed', theme === 'light' ? 'true' : 'false');
+      }
+
+      function toggle() {
+        var next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+        apply(next);
+        localStorage.setItem(STORAGE_KEY, next);
+      }
+
+      apply(resolveInitial());
+      btn.addEventListener('click', toggle);
+
+      return { toggle: toggle };
+    })();
+
+    /* ============================================================
+       Export — PNG / JPEG / WebP / SVG (download) and Copy PNG (clipboard)
+       ============================================================ */
+    (function () {
+      var RASTER_SCALE = 4;
+
+      function diagramFilename() {
+        var title = (document.title || 'diagram').replace(/\s+Architecture(\s+Diagram)?$/i, '').trim();
+        return title.replace(/[^a-z0-9_\-]+/gi, '-')
+                    .toLowerCase()
+                    .replace(/^-+|-+$/g, '') || 'diagram';
+      }
+
+      function currentBg() {
+        return getComputedStyle(document.body).backgroundColor || '#ffffff';
+      }
+
+      function serializeSvg(scale, opts) {
+        scale = scale || 1;
+        opts = opts || {};
+        var autoTheme = opts.autoTheme === true;
+
+        var svg = document.querySelector('.diagram-container svg');
+        var clone = svg.cloneNode(true);
+
+        var vb = svg.viewBox.baseVal;
+        clone.setAttribute('width', vb.width * scale);
+        clone.setAttribute('height', vb.height * scale);
+        clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+
+        var hostStyle = Array.prototype.map.call(document.querySelectorAll('style'), function (s) {
+          return s.textContent;
+        }).join('\n');
+
+        var varNames = [
+          '--bg','--grid','--text','--text-muted','--text-dim',
+          '--arrow','--arrow-emphasis','--mask',
+          '--frontend-fill','--frontend-stroke',
+          '--backend-fill','--backend-stroke',
+          '--database-fill','--database-stroke',
+          '--cloud-fill','--cloud-stroke',
+          '--security-fill','--security-stroke',
+          '--messagebus-fill','--messagebus-stroke',
+          '--external-fill','--external-stroke'
+        ];
+
+        function resolveVars(themeAttr) {
+          var probe = document.createElement('div');
+          probe.setAttribute('data-theme', themeAttr);
+          probe.style.cssText = 'position:absolute;width:0;height:0;visibility:hidden;';
+          document.body.appendChild(probe);
+          try {
+            var c = getComputedStyle(probe);
+            return varNames.map(function (n) {
+              return n + ': ' + c.getPropertyValue(n).trim() + ';';
+            }).join(' ');
+          } finally {
+            document.body.removeChild(probe);
+          }
+        }
+
+        var fontFallback = [400, 500, 600, 700].map(function (w) {
+          return "@font-face { font-family: 'JetBrains Mono'; font-weight: " + w +
+                 "; src: local('JetBrains Mono'), local('JetBrainsMono-Regular'); }";
+        }).join('\n');
+
+        var style = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+        var bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        bgRect.setAttribute('width', '100%');
+        bgRect.setAttribute('height', '100%');
+
+        if (autoTheme) {
+          var darkVars = resolveVars('dark');
+          var lightVars = resolveVars('light');
+
+          style.textContent =
+            fontFallback + '\n' +
+            "svg { font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace; }\n" +
+            hostStyle + '\n' +
+            ':root, svg { ' + darkVars + ' }\n' +
+            '@media (prefers-color-scheme: light) { :root, svg { ' + lightVars + ' } }\n' +
+            'svg[data-theme="light"] { ' + lightVars + ' }\n' +
+            'svg[data-theme="dark"] { ' + darkVars + ' }\n' +
+            'rect.c-bg-rect { fill: var(--bg); }\n';
+
+          clone.removeAttribute('data-theme');
+          bgRect.setAttribute('class', 'c-bg-rect');
+        } else {
+          var theme = document.documentElement.getAttribute('data-theme') || 'dark';
+          var themeHost = document.querySelector('[data-theme="' + theme + '"]') || document.documentElement;
+          var computed = getComputedStyle(themeHost);
+          var vars = varNames.map(function (n) {
+            return n + ': ' + computed.getPropertyValue(n).trim() + ';';
+          }).join(' ');
+
+          style.textContent =
+            fontFallback + '\n' +
+            "svg { font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace; }\n" +
+            hostStyle + '\n' +
+            ':root, svg { ' + vars + ' }\n';
+
+          bgRect.setAttribute('fill', computed.getPropertyValue('--bg').trim() || '#ffffff');
+        }
+
+        clone.insertBefore(style, clone.firstChild);
+        clone.insertBefore(bgRect, style.nextSibling);
+
+        return {
+          svgString: new XMLSerializer().serializeToString(clone),
+          width: vb.width * scale,
+          height: vb.height * scale
+        };
+      }
+
+      function download(blob, filename) {
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      }
+
+      var MAX_CANVAS_PIXELS = 16 * 1024 * 1024;
+
+      function pickSafeScale(vbW, vbH) {
+        for (var s = RASTER_SCALE; s >= 1; s--) {
+          if (vbW * s * vbH * s <= MAX_CANVAS_PIXELS) return s;
+        }
+        return 1;
+      }
+
+      function rasterize(format) {
+        var svg = document.querySelector('.diagram-container svg');
+        var vb = svg.viewBox.baseVal;
+        var scale = pickSafeScale(vb.width, vb.height);
+        var data = serializeSvg(scale);
+        var svgBlob = new Blob([data.svgString], { type: 'image/svg+xml;charset=utf-8' });
+        var svgUrl = URL.createObjectURL(svgBlob);
+
+        return new Promise(function (resolve, reject) {
+          var img = new Image();
+          img.onload = function () {
+            var canvas = document.createElement('canvas');
+            canvas.width = data.width;
+            canvas.height = data.height;
+            var ctx = canvas.getContext('2d');
+            if (format === 'jpeg') {
+              ctx.fillStyle = currentBg();
+              ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+            ctx.drawImage(img, 0, 0);
+            URL.revokeObjectURL(svgUrl);
+            var mime = format === 'jpeg' ? 'image/jpeg' :
+                       format === 'webp' ? 'image/webp' : 'image/png';
+            var quality = format === 'png' ? undefined : 0.95;
+            canvas.toBlob(function (blob) {
+              if (!blob) reject(new Error('toBlob returned null for ' + format));
+              else resolve(blob);
+            }, mime, quality);
+          };
+          img.onerror = function (e) {
+            URL.revokeObjectURL(svgUrl);
+            reject(e);
+          };
+          img.src = svgUrl;
+        });
+      }
+
+      var menu = document.getElementById('export-menu');
+      var btn = document.getElementById('btn-export');
+      var items = function () {
+        return Array.prototype.slice.call(menu.querySelectorAll('button[role="menuitem"]'));
+      };
+
+      function canCopyImage() {
+        return typeof ClipboardItem !== 'undefined' &&
+               navigator.clipboard &&
+               typeof navigator.clipboard.write === 'function';
+      }
+
+      function supports(format) {
+        if (format === 'svg' || format === 'png') return true;
+        var mime = format === 'jpeg' ? 'image/jpeg' : 'image/webp';
+        try {
+          var c = document.createElement('canvas');
+          c.width = c.height = 2;
+          return c.toDataURL(mime).indexOf('data:' + mime) === 0;
+        } catch (_) { return false; }
+      }
+
+      items().forEach(function (it) {
+        if (it.dataset.format && !supports(it.dataset.format)) {
+          it.disabled = true;
+          it.title = 'Not supported by this browser';
+          it.style.opacity = '0.5';
+        }
+        if (it.dataset.action === 'copy' && !canCopyImage()) {
+          it.disabled = true;
+          it.title = 'Clipboard image write not supported by this browser';
+          it.style.opacity = '0.5';
+        }
+      });
+
+      function toast(msg) {
+        var t = document.createElement('div');
+        t.className = 'archify-toast';
+        t.textContent = msg;
+        document.body.appendChild(t);
+        requestAnimationFrame(function () { t.classList.add('show'); });
+        setTimeout(function () {
+          t.classList.remove('show');
+          setTimeout(function () { t.remove(); }, 300);
+        }, 1500);
+      }
+
+      function openMenu() {
+        menu.classList.add('open');
+        btn.setAttribute('aria-expanded', 'true');
+        var first = items().filter(function (i) { return !i.disabled; })[0];
+        if (first) first.focus();
+      }
+      function closeMenu(focusTrigger) {
+        menu.classList.remove('open');
+        btn.setAttribute('aria-expanded', 'false');
+        if (focusTrigger) btn.focus();
+      }
+      function isOpen() { return menu.classList.contains('open'); }
+
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (isOpen()) closeMenu(false);
+        else openMenu();
+      });
+      document.addEventListener('click', function (e) {
+        if (!menu.contains(e.target) && e.target !== btn) closeMenu(false);
+      });
+
+      menu.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') { e.preventDefault(); closeMenu(true); return; }
+        if (e.key === 'Tab')    { closeMenu(false); return; }
+
+        var available = items().filter(function (i) { return !i.disabled; });
+        var current = available.indexOf(document.activeElement);
+        switch (e.key) {
+          case 'ArrowDown':
+            e.preventDefault();
+            if (available.length) available[(current + 1 + available.length) % available.length].focus();
+            break;
+          case 'ArrowUp':
+            e.preventDefault();
+            if (available.length) available[(current - 1 + available.length) % available.length].focus();
+            break;
+          case 'Home':
+            e.preventDefault();
+            if (available[0]) available[0].focus();
+            break;
+          case 'End':
+            e.preventDefault();
+            if (available.length) available[available.length - 1].focus();
+            break;
+        }
+      });
+
+      function runExport(format) {
+        var base = diagramFilename();
+        closeMenu(false);
+        return (format === 'svg'
+          ? Promise.resolve(serializeSvg(1, { autoTheme: true })).then(function (d) {
+              download(new Blob([d.svgString], { type: 'image/svg+xml;charset=utf-8' }), base + '.svg');
+            })
+          : rasterize(format).then(function (blob) {
+              download(blob, base + '.' + format);
+            })
+        ).catch(function (err) {
+          console.error(err);
+          alert('Export failed: ' + (err && err.message ? err.message : format));
+        });
+      }
+
+      function runCopy() {
+        closeMenu(false);
+        if (!canCopyImage()) {
+          alert('Clipboard image write not supported in this browser.');
+          return;
+        }
+        return rasterize('png').then(function (blob) {
+          return navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        }).then(function () {
+          toast('Copied PNG to clipboard');
+        }).catch(function (err) {
+          console.error(err);
+          alert('Copy failed: ' + (err && err.message ? err.message : 'unknown'));
+        });
+      }
+
+      menu.addEventListener('click', function (e) {
+        var copyBtn = e.target.closest('button[data-action="copy"]');
+        if (copyBtn && !copyBtn.disabled) { runCopy(); return; }
+
+        var formatBtn = e.target.closest('button[data-format]');
+        if (formatBtn && !formatBtn.disabled) { runExport(formatBtn.dataset.format); }
+      });
+
+      Archify.exportMenu = { open: openMenu, close: closeMenu, isOpen: isOpen, run: runExport };
+
+      try {
+        if (new URLSearchParams(window.location.search).get('openExport') === '1') {
+          var openWhenReady = function () {
+            requestAnimationFrame(function () { requestAnimationFrame(openMenu); });
+          };
+          if (document.fonts && document.fonts.ready) {
+            document.fonts.ready.then(openWhenReady);
+          } else {
+            setTimeout(openWhenReady, 200);
+          }
+        }
+      } catch (_) {}
+    })();
+
+    /* ============================================================
+       Global keyboard shortcuts
+         T -> toggle theme
+         E -> open export menu
+       ============================================================ */
+    document.addEventListener('keydown', function (e) {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      var t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (e.key === 't' || e.key === 'T') {
+        e.preventDefault();
+        Archify.theme.toggle();
+      } else if (e.key === 'e' || e.key === 'E') {
+        e.preventDefault();
+        if (!Archify.exportMenu.isOpen()) Archify.exportMenu.open();
+      }
+    });
+  </script>
+</body>
+</html>

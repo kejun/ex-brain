@@ -419,7 +419,8 @@ ${context}
 ## 回答要求
 - 仅基于提供的知识库内容回答，不要编造信息
 - 如果知识库中没有相关信息，请明确说明
-- 引用来源时使用 [[slug|标题]] 的格式
+- 引用来源时必须使用每个章节标题下方的 **Slug:** 字段的实际值，格式为 [[实际slug值|标题]]
+- 绝对不要使用章节编号 [1]、[2] 等作为 slug，slug 必须是实际的英文路径（如 zhang-san、project-x 等）
 - 使用清晰的 markdown 格式
 - 如果涉及时间线信息，请在回答中体现
 - 区分哪些信息来自「页面正文」、哪些来自「原始文档」、哪些来自「关联页面」
@@ -433,9 +434,16 @@ ${context}
 
   const stream = new ReadableStream({
     async start(controller) {
+      let finished = false;
+      const safeEnqueue = (data: Uint8Array) => {
+        if (!finished) controller.enqueue(data);
+      };
+      const safeClose = () => {
+        if (!finished) { finished = true; controller.close(); }
+      };
       try {
         // Send sources first
-        controller.enqueue(encoder.encode(
+        safeEnqueue(encoder.encode(
           `data: ${JSON.stringify({ type: 'sources', sources })}\n\n`
         ));
 
@@ -468,10 +476,10 @@ ${context}
 
         if (!response.ok) {
           const errorText = await response.text().catch(() => '');
-          controller.enqueue(encoder.encode(
+          safeEnqueue(encoder.encode(
             `data: ${JSON.stringify({ type: 'error', message: `LLM API error: ${response.status} ${errorText.replace(/[\n\r]/g, ' ')}` })}\n\n`
           ));
-          controller.close();
+          safeClose();
           return;
         }
 
@@ -482,6 +490,7 @@ ${context}
         let chunkCount = 0;
 
         while (true) {
+          if (finished) break;
           const { done, value } = await reader.read();
           if (done) break;
           chunkCount++;
@@ -500,10 +509,10 @@ ${context}
             if (!trimmed.startsWith('data: ')) {
               // Check for [DONE] signal in non-data lines
               if (trimmed === '[DONE]') {
-                controller.enqueue(encoder.encode(
+                safeEnqueue(encoder.encode(
                   `data: ${JSON.stringify({ type: 'done' })}\n\n`
                 ));
-                controller.close();
+                safeClose();
                 return;
               }
               continue;
@@ -514,10 +523,10 @@ ${context}
 
               // Check for [DONE] marker
               if (trimmed === 'data: [DONE]') {
-                controller.enqueue(encoder.encode(
+                safeEnqueue(encoder.encode(
                   `data: ${JSON.stringify({ type: 'done' })}\n\n`
                 ));
-                controller.close();
+                safeClose();
                 return;
               }
 
@@ -527,7 +536,7 @@ ${context}
 
               if (content) {
                 totalChars += content.length;
-                controller.enqueue(encoder.encode(
+                safeEnqueue(encoder.encode(
                   `data: ${JSON.stringify({ type: 'delta', content })}\n\n`
                 ));
               }
@@ -535,10 +544,10 @@ ${context}
               // Check for finish_reason with a non-null value (stream ended)
               if (finishReason && finishReason !== 'null' && finishReason !== null) {
                 console.log(`[ask] LLM finished with reason: ${finishReason}, total chars: ${totalChars}`);
-                controller.enqueue(encoder.encode(
+                safeEnqueue(encoder.encode(
                   `data: ${JSON.stringify({ type: 'done' })}\n\n`
                 ));
-                controller.close();
+                safeClose();
                 return;
               }
             } catch (parseErr) {
@@ -551,10 +560,10 @@ ${context}
         console.log(`[ask] LLM stream ended. Chunks: ${chunkCount}, Total chars forwarded: ${totalChars}, Remaining buffer: ${buffer.length} chars`);
 
         // Process any remaining buffer content after stream ends
-        if (buffer.trim()) {
+        if (buffer.trim() && !finished) {
           const trimmed = buffer.trim();
           if (trimmed === 'data: [DONE]' || trimmed === '[DONE]') {
-            controller.enqueue(encoder.encode(
+            safeEnqueue(encoder.encode(
               `data: ${JSON.stringify({ type: 'done' })}\n\n`
             ));
           } else if (trimmed.startsWith('data: ')) {
@@ -563,7 +572,7 @@ ${context}
               const content = json.choices?.[0]?.delta?.content;
               if (content) {
                 totalChars += content.length;
-                controller.enqueue(encoder.encode(
+                safeEnqueue(encoder.encode(
                   `data: ${JSON.stringify({ type: 'delta', content })}\n\n`
                 ));
               }
@@ -572,17 +581,17 @@ ${context}
         }
 
         // Always send done at end of stream if we got any content
-        if (totalChars > 0) {
-          controller.enqueue(encoder.encode(
+        if (totalChars > 0 && !finished) {
+          safeEnqueue(encoder.encode(
             `data: ${JSON.stringify({ type: 'done' })}\n\n`
           ));
         }
-        controller.close();
+        safeClose();
       } catch (error) {
-        controller.enqueue(encoder.encode(
+        safeEnqueue(encoder.encode(
           `data: ${JSON.stringify({ type: 'error', message: String(error).replace(/[\n\r]/g, ' ') })}\n\n`
         ));
-        controller.close();
+        safeClose();
       }
     }
   });
@@ -598,7 +607,7 @@ ${context}
 
 function getGraphHtml(): string {
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="zh-hans">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -606,10 +615,10 @@ function getGraphHtml(): string {
   <script type="module">
     import ForceGraph3D from 'https://esm.sh/3d-force-graph@1.80.0';
     import SpriteText from 'https://esm.sh/three-spritetext@1.10.0';
-    import * as smd from 'https://esm.sh/streaming-markdown@0.0.9';
+    import { marked } from 'https://esm.sh/marked@15.0.12';
     window.ForceGraph3D = ForceGraph3D;
     window.SpriteText = SpriteText;
-    window.SMD = smd;
+    window.marked = marked;
     window.dispatchEvent(new Event('graph-deps-ready'));
   </script>
   <style>
@@ -1171,9 +1180,29 @@ function getGraphHtml(): string {
     #ask-result .source-item:hover {
       background: #333;
     }
-    #ask-result .answer {
-      white-space: pre-wrap;
+
+    /* Inline citation badges */
+    .ask-citation {
+      display: inline-block;
+      padding: 1px 6px;
+      margin: 0 2px;
+      background: #1e3a5f;
+      border: 1px solid #2a5a8f;
+      border-radius: 3px;
+      font-size: 11px;
+      line-height: 1.4;
+      color: #5ba3e6;
+      cursor: pointer;
+      vertical-align: middle;
+      text-decoration: none;
+      transition: all 0.15s;
+      transform: scale(0.85);
     }
+    .ask-citation:hover {
+      background: #2a5a8f;
+      color: #7ec8ff;
+    }
+
     #ask-result .error {
       color: #f44336;
     }
@@ -1509,7 +1538,7 @@ function getGraphHtml(): string {
       for (var i = 0; i < keys.length; i++) { if (degrees[keys[i]] > maxDeg) maxDeg = degrees[keys[i]]; }
 
       graphData.nodes.forEach(function(n) {
-        n.val = 2 + 10 * ((degrees[n.id]||0) / maxDeg);
+        n.val = 12 + 36 * ((degrees[n.id]||0) / maxDeg);
         n.color = typeColors[n.type] || typeColors.other;
       });
 
@@ -1523,6 +1552,7 @@ function getGraphHtml(): string {
         .cooldownTime(1500)
         .d3AlphaDecay(0.05)
         .d3VelocityDecay(0.6)
+        .nodeRelSize(1)
         .nodeVal('val')
         .nodeColor(function(n) {
           if (n === selectedNode3D) return '#ffffff';
@@ -1531,6 +1561,7 @@ function getGraphHtml(): string {
         .nodeThreeObject(function(n) {
           if (!labelsVisible) return null;
           var text = (n.label || n.id || '').toString();
+          if (text.length > 16) text = text.slice(0, 16) + '…';
           if (!text) return null;
           try {
             var sprite = new SpriteText(text);
@@ -1545,10 +1576,14 @@ function getGraphHtml(): string {
           }
         })
         .nodeThreeObjectExtend(true)
-        .nodeLabel(function(n) { return n.label + '  (' + n.id + ')'; })
+        .nodeLabel(function(n) {
+          var label = (n.label || n.id || '').toString();
+          if (label.length > 16) label = label.slice(0, 16) + '…';
+          return label + '  (' + n.id + ')';
+        })
         .linkColor(function(l) { return '#777'; })
         .linkWidth(function(l) { return highlightLinks.has(l) ? 1.8 : 0.8; })
-        .linkOpacity(0.3)
+        .linkOpacity(0.4)
         .linkMaterial(null)
         .linkDirectionalArrowLength(0)
         .nodeVisibility(function(n) { return activeTypes.has(n.type); })
@@ -1563,6 +1598,7 @@ function getGraphHtml(): string {
           if (node && (now - last) < 350) { flyToNode(node); }
           else if (node) { selectedNode3D = node; selectNode(node.id); }
         })
+        .enableNodeDrag(false)
         .onNodeHover(function(node) {
           if (selectedNode3D) return;
           if ((!node && !highlightNodes.size) || (node && hoverNode === node)) return;
@@ -1644,13 +1680,34 @@ function getGraphHtml(): string {
       renderNodeList(document.getElementById('search-input').value);
       try {
         var res = await fetch('/api/node/' + encodeURIComponent(slug));
-        showNodeDetail(await res.json());
-      } catch (err) { console.error(err); }
+        if (!res.ok) {
+          console.warn('Node not found:', slug);
+          showNodeDetail(null);
+          return;
+        }
+        var data = await res.json();
+        if (!data || !data.page) {
+          console.warn('Node data empty:', slug);
+          showNodeDetail(null);
+          return;
+        }
+        showNodeDetail(data);
+      } catch (err) { console.error('Failed to load node:', slug, err); }
     }
 
     function showNodeDetail(data) {
-      var page = data.page, detail = document.getElementById('node-detail');
+      var detail = document.getElementById('node-detail');
       var content = document.getElementById('detail-content');
+      if (!data || !data.page) {
+        document.getElementById('detail-title').textContent = 'Not Found';
+        document.getElementById('detail-type').textContent = '';
+        content.innerHTML = '<div class="error">This page could not be loaded. It may have been deleted or the slug is invalid.</div>';
+        highlightNodes.clear(); highlightLinks.clear();
+        refreshGraph();
+        detail.classList.add('visible');
+        return;
+      }
+      var page = data.page;
       document.getElementById('detail-title').textContent = page.title;
       document.getElementById('detail-type').textContent = page.type;
 
@@ -1727,6 +1784,7 @@ function getGraphHtml(): string {
       Graph.nodeThreeObject(function(n) {
         if (!labelsVisible) return null;
         var text = (n.label || n.id || '').toString();
+        if (text.length > 16) text = text.slice(0, 16) + '\u2026';
         if (!text) return null;
         try {
           var sprite = new SpriteText(text);
@@ -1795,8 +1853,6 @@ function getGraphHtml(): string {
         var buffer = '';
         var sources = [];
         var answer = ''; // Fallback for streaming-md unavailable
-        var smParser = null;
-        var smRenderer = null;
         var answerContainer = null;
         var sourcesContainer = null;
 
@@ -1807,11 +1863,47 @@ function getGraphHtml(): string {
             }).join('') + '</div>';
         }
 
-        function initStreamingMd() {
-          if (smRenderer || typeof window.SMD === 'undefined') return;
-          var renderer = window.SMD.default_renderer(answerContainer);
-          smRenderer = renderer;
-          smParser = window.SMD.parser(renderer);
+        function renderAnswer(text) {
+          var html = window.marked.parse(text || '');
+          // Replace [[slug|title]] and [[slug]] with clickable citations
+          // Using simple string replacement to avoid regex escaping issues in template literals
+          var result = '';
+          var i = 0;
+          while (i < html.length) {
+            if (html[i] === '[' && html[i+1] === '[') {
+              var end = html.indexOf(']]', i + 2);
+              if (end !== -1) {
+                var inner = html.substring(i + 2, end);
+                var pipeIdx = inner.indexOf('|');
+                if (pipeIdx !== -1) {
+                  var slug = inner.substring(0, pipeIdx);
+                  var title = inner.substring(pipeIdx + 1);
+                  result += '<a class="ask-citation" data-cite-slug="' + escapeHtml(slug) + '">' + escapeHtml(title) + '</a>';
+                } else {
+                  var slug = inner;
+                  result += '<a class="ask-citation" data-cite-slug="' + escapeHtml(slug) + '">' + escapeHtml(slug) + '</a>';
+                }
+                i = end + 2;
+                continue;
+              }
+            }
+            result += html[i];
+            i++;
+          }
+          return result;
+        }
+
+        function bindCitationClicks() {
+          askResult.querySelectorAll('.ask-citation').forEach(function(el) {
+            el.addEventListener('click', function(e) {
+              e.preventDefault();
+              selectNode(el.dataset.citeSlug);
+            });
+          });
+        }
+
+        function initAnswerContainer() {
+          // No streaming markdown needed; we'll render with marked on completion
         }
 
         function read() {
@@ -1819,16 +1911,17 @@ function getGraphHtml(): string {
             if (result.done) {
               // Stream ended - finalize
               try {
-                if (smParser) smParser.end();
-                if (answerContainer && sourcesContainer) {
+                if (answerContainer && sourcesContainer && answer.length > 0) {
+                  answerContainer.innerHTML = renderAnswer(answer);
                   sourcesContainer.innerHTML = buildSourcesHtml();
                   bindSourceClicks();
+                  bindCitationClicks();
                 } else if (answer.length > 0) {
-                  // Fallback if streaming-md not available
                   var finalHtml = buildSourcesHtml() +
-                    '<div class="answer markdown-content">' + parseMarkdown(answer) + '</div>';
+                    '<div class="answer markdown-content">' + renderAnswer(answer) + '</div>';
                   askResult.innerHTML = finalHtml;
                   bindSourceClicks();
+                  bindCitationClicks();
                 } else if (sources.length === 0) {
                   askResult.innerHTML = '<div class="error">No response received.</div>';
                 }
@@ -1856,26 +1949,27 @@ function getGraphHtml(): string {
                 if (data.type === 'sources') {
                   sources = data.sources || [];
                   askResult.innerHTML = buildSourcesHtml() +
-                    '<div class="answer stream-md" id="stream-answer">Loading answer...</div>';
+                    '<div class="answer markdown-content" id="stream-answer"></div>';
                   sourcesContainer = askResult.querySelector('.sources');
                   answerContainer = document.getElementById('stream-answer');
-                  initStreamingMd();
+                  initAnswerContainer();
                   bindSourceClicks();
                 } else if (data.type === 'delta') {
-                  if (smParser) {
-                    smParser.write(data.content);
-                  } else {
-                    answer += data.content;
-                    var answerEl = askResult.querySelector('.answer');
-                    if (answerEl) answerEl.textContent = answer;
+                  answer += data.content;
+                  if (answerContainer) {
+                    answerContainer.innerHTML = renderAnswer(answer);
+                    bindCitationClicks();
                   }
                 } else if (data.type === 'done') {
                   // Finalize
                   try {
-                    if (smParser) smParser.end();
+                    if (answerContainer && answer.length > 0) {
+                      answerContainer.innerHTML = renderAnswer(answer);
+                    }
                     if (sourcesContainer) {
                       sourcesContainer.innerHTML = buildSourcesHtml();
                       bindSourceClicks();
+                      bindCitationClicks();
                     }
                   } catch (finalizeErr) {
                     console.error('Finalize error:', finalizeErr);
@@ -1901,15 +1995,17 @@ function getGraphHtml(): string {
             if (err.name === 'AbortError') return;
             console.error('Stream read error:', err);
             try {
-              if (smParser) smParser.end();
-              if (sourcesContainer) {
+              if (answerContainer && answer.length > 0) {
+                answerContainer.innerHTML = renderAnswer(answer);
                 sourcesContainer.innerHTML = buildSourcesHtml();
                 bindSourceClicks();
+                bindCitationClicks();
               } else if (answer.length > 0) {
                 var finalHtml = buildSourcesHtml() +
-                  '<div class="answer markdown-content">' + parseMarkdown(answer) + '</div>';
+                  '<div class="answer markdown-content">' + renderAnswer(answer) + '</div>';
                 askResult.innerHTML = finalHtml;
                 bindSourceClicks();
+                bindCitationClicks();
               } else {
                 askResult.innerHTML = '<div class="error">Connection error: ' + escapeHtml(String(err)) + '</div>';
               }
