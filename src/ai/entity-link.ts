@@ -8,6 +8,7 @@
 
 import { f } from "@ax-llm/ax";
 import type { ResolvedLLM } from "../settings";
+import { entitySlugFromName } from "../slug-utils";
 import { AIPipeline, normalizeFields } from "./ax-pipeline";
 
 // ---------------------------------------------------------------------------
@@ -44,7 +45,14 @@ export type ExtractionResult = EntityRelation[];
 const entitySig = f()
   .input("inputText", f.string("Text to extract entity relationships from"))
   .output("relations", f.json(
-    "Array of relations. Each: { fromName, fromType, toName, toType, relation, context (in Chinese), confidence }. " +
+    "Extract only meaningful entity-to-entity relations. " +
+    "An entity must be a standalone proper noun or named concept that can independently answer who/what it is. " +
+    "Do NOT extract auxiliary verbs, action verbs, status words, generic nouns, grammatical fragments, or meaningless substring splits. " +
+    "For Chinese text, do not split phrases into single-character fragments unless the character itself is a known standalone name. " +
+    "Examples: in '需降级方案', do not extract '需'; in '模型未适配', do not extract '适配'; in '命名已定', do not extract '命名'. " +
+    "Use other only for clear named concepts, product names, systems, standards, or domain terms that are not person/company/project/organization/event. " +
+    "Use related_to sparingly; never use it to connect ordinary words. If uncertain, omit the relation. " +
+    "Return Array of relations. Each: { fromName, fromType, toName, toType, relation, context (in Chinese), confidence }. " +
     "fromType/toType: person|company|project|organization|event|other. " +
     "relation: founder_of|works_at|leader_of|collaborates_with|competes_with|acquired|part_of|invested_in|mentioned_in|related_to. " +
     "confidence: 0-1."
@@ -111,22 +119,8 @@ const entityPipeline = new AIPipeline<
 // Entity slug helpers
 // ---------------------------------------------------------------------------
 
-const TYPE_PREFIX: Record<EntityType, string> = {
-  person: "people",
-  company: "companies",
-  project: "projects",
-  organization: "organizations",
-  event: "events",
-  other: "entities",
-};
-
 export function entityToSlug(name: string, type: EntityType): string {
-  const prefix = TYPE_PREFIX[type] ?? "entities";
-  const slugPart = name
-    .toLowerCase()
-    .replace(/[^a-z0-9\u4e00-\u9fff]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return `${prefix}/${slugPart || "untitled"}`;
+  return entitySlugFromName(name, type);
 }
 
 // ---------------------------------------------------------------------------

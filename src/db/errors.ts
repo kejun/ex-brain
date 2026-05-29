@@ -27,6 +27,8 @@ export type DbOperation =
   | "putPage"
   | "listPages"
   | "deletePage"
+  | "renamePage"
+  | "mergePage"
   | "search"
   | "query"
   | "syncPageToSearch"

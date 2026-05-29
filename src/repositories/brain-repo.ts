@@ -1,4 +1,4 @@
-import { nowIso } from "../slug-utils";
+import { entitySlugFromName, nowIso } from "../slug-utils";
 import type {
   BrainStats,
   PageRecord,
@@ -34,6 +34,43 @@ function parseFrontmatter(raw: string): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+function entitySlugForTitle(currentSlug: string, title: string): string {
+  const slash = currentSlug.lastIndexOf("/");
+  if (slash === -1) {
+    return entitySlugFromName(title, "other");
+  }
+  const prefix = currentSlug.slice(0, slash);
+  const type = prefix === "people"
+    ? "person"
+    : prefix === "companies"
+      ? "company"
+      : prefix === "projects"
+        ? "project"
+        : prefix === "organizations"
+          ? "organization"
+          : prefix === "events"
+            ? "event"
+            : "other";
+  return entitySlugFromName(title, type);
+}
+
+function mergeUniqueStrings(value: unknown, next: string): string[] {
+  const values = Array.isArray(value) ? value.map(String) : [];
+  if (!values.includes(next)) {
+    values.push(next);
+  }
+  return values;
+}
+
+function appendMergedSection(base: string, sourceTitle: string, sourceSlug: string, sourceContent: string): string {
+  const content = sourceContent.trim();
+  if (!content || base.includes(content)) {
+    return base;
+  }
+  const heading = `## Merged from ${sourceTitle} (${sourceSlug})`;
+  return [base.trim(), `${heading}\n\n${content}`].filter(Boolean).join("\n\n");
 }
 
 export class BrainRepository {
@@ -776,6 +813,171 @@ export class BrainRepository {
       const dbError = wrapDbError(error, "deletePage", { slug });
       logDbError(dbError);
       throw dbError;
+    }
+  }
+
+  async renamePage(slug: string, title: string): Promise<{ slug: string; merged: boolean }> {
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) {
+      throw new Error("Entity title cannot be empty");
+    }
+
+    try {
+      const page = await this.getPage(slug);
+      if (!page) {
+        throw new Error(`Page not found: ${slug}`);
+      }
+
+      const nextSlug = entitySlugForTitle(slug, trimmedTitle);
+      if (nextSlug === slug) {
+        await this.putPage({
+          slug,
+          type: page.type,
+          title: trimmedTitle,
+          compiledTruth: page.compiledTruth,
+          timeline: page.timeline,
+          frontmatter: page.frontmatter,
+        });
+        return { slug, merged: false };
+      }
+
+      const existing = await this.getPage(nextSlug);
+      if (existing) {
+        await this.mergePage(slug, nextSlug);
+        return { slug: nextSlug, merged: true };
+      }
+
+      await this.withTransaction(async () => {
+        const now = nowIso();
+        await this.db.client.execute(
+          `UPDATE pages
+           SET slug = ?, title = ?, updated_at = ?
+           WHERE slug = ?`,
+          [nextSlug, trimmedTitle, now, slug],
+        );
+        await this.movePageReferences(slug, nextSlug);
+      });
+      await this.deleteSearchDocument(slug);
+      await this.syncPageToSearch(nextSlug);
+      return { slug: nextSlug, merged: false };
+    } catch (error) {
+      const dbError = wrapDbError(error, "renamePage", { slug, title });
+      logDbError(dbError);
+      throw dbError;
+    }
+  }
+
+  async mergePage(sourceSlug: string, targetSlug: string): Promise<{ slug: string; merged: true }> {
+    if (sourceSlug === targetSlug) {
+      throw new Error("Source and target must be different");
+    }
+
+    try {
+      const source = await this.getPage(sourceSlug);
+      const target = await this.getPage(targetSlug);
+      if (!source) {
+        throw new Error(`Page not found: ${sourceSlug}`);
+      }
+      if (!target) {
+        throw new Error(`Merge target not found: ${targetSlug}`);
+      }
+
+      await this.withTransaction(async () => {
+        const frontmatter = {
+          ...source.frontmatter,
+          ...target.frontmatter,
+          mergedFromSlugs: mergeUniqueStrings(target.frontmatter.mergedFromSlugs, sourceSlug),
+        };
+
+        await this.putPage({
+          slug: targetSlug,
+          type: target.type,
+          title: target.title,
+          compiledTruth: appendMergedSection(target.compiledTruth, source.title, source.slug, source.compiledTruth),
+          timeline: appendMergedSection(target.timeline, source.title, source.slug, source.timeline),
+          frontmatter,
+        });
+
+        await this.movePageReferences(sourceSlug, targetSlug);
+        await this.db.client.execute("DELETE FROM pages WHERE slug = ?", [sourceSlug]);
+      });
+      await this.deleteSearchDocument(sourceSlug);
+      await this.syncPageToSearch(targetSlug);
+      return { slug: targetSlug, merged: true };
+    } catch (error) {
+      const dbError = wrapDbError(error, "mergePage", { sourceSlug, targetSlug });
+      logDbError(dbError);
+      throw dbError;
+    }
+  }
+
+  private async withTransaction<T>(work: () => Promise<T>): Promise<T> {
+    await this.db.client.execute("BEGIN");
+    try {
+      const result = await work();
+      await this.db.client.execute("COMMIT");
+      return result;
+    } catch (error) {
+      try {
+        await this.db.client.execute("ROLLBACK");
+      } catch {
+        // Preserve the original failure.
+      }
+      throw error;
+    }
+  }
+
+  private async movePageReferences(sourceSlug: string, targetSlug: string): Promise<void> {
+    const oldLinks = many<{ from_slug: string; to_slug: string; context: string }>(
+      await this.db.client.execute(
+        `SELECT from_slug, to_slug, context FROM links
+         WHERE from_slug = ? OR to_slug = ?`,
+        [sourceSlug, sourceSlug],
+      ),
+    );
+
+    await this.db.client.execute("DELETE FROM links WHERE from_slug = ? OR to_slug = ?", [sourceSlug, sourceSlug]);
+
+    for (const oldLink of oldLinks) {
+      const fromSlug = oldLink.from_slug === sourceSlug ? targetSlug : oldLink.from_slug;
+      const toSlug = oldLink.to_slug === sourceSlug ? targetSlug : oldLink.to_slug;
+      if (fromSlug === toSlug) {
+        continue;
+      }
+
+      const existing = one<{ context: string }>(
+        await this.db.client.execute(
+          `SELECT context FROM links WHERE from_slug = ? AND to_slug = ?`,
+          [fromSlug, toSlug],
+        ),
+      );
+      if (existing) {
+        if (!existing.context.includes(oldLink.context)) {
+          await this.db.client.execute(
+            `UPDATE links SET context = ? WHERE from_slug = ? AND to_slug = ?`,
+            [`${existing.context}\n${oldLink.context}`, fromSlug, toSlug],
+          );
+        }
+      } else {
+        await this.link(fromSlug, toSlug, oldLink.context);
+      }
+    }
+
+    const tags = await this.tags(sourceSlug);
+    for (const tag of tags) {
+      await this.tag(targetSlug, tag);
+    }
+
+    await this.db.client.execute("DELETE FROM page_tags WHERE page_slug = ?", [sourceSlug]);
+    await this.db.client.execute("UPDATE timeline_entries SET page_slug = ? WHERE page_slug = ?", [targetSlug, sourceSlug]);
+    await this.db.client.execute("UPDATE raw_data SET page_slug = ? WHERE page_slug = ?", [targetSlug, sourceSlug]);
+  }
+
+  private async deleteSearchDocument(slug: string): Promise<void> {
+    try {
+      await this.db.pagesCollection.delete({ ids: [slug] });
+    } catch {
+      // Search cleanup is best effort; SQL data remains authoritative.
     }
   }
 

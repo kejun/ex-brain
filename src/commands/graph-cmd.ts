@@ -118,6 +118,19 @@ async function getNodeDetails(repo: BrainRepository, slug: string) {
   };
 }
 
+async function readJsonBody(req: Request): Promise<Record<string, unknown>> {
+  try {
+    return (await req.json()) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+function errorResponse(error: unknown, status = 500): Response {
+  const message = error instanceof Error ? error.message : String(error);
+  return Response.json({ error: message }, { status });
+}
+
 export function registerGraphCommand(program: Command): void {
   program
     .command("graph")
@@ -178,6 +191,34 @@ Examples:
               return Response.json(details);
             } catch (error) {
               return Response.json({ error: String(error) }, { status: 500 });
+            }
+          }
+
+          if (url.pathname === "/api/entity/rename" && req.method === "POST") {
+            try {
+              const body = await readJsonBody(req);
+              const slug = String(body.slug ?? "").trim();
+              const title = String(body.title ?? "").trim();
+              if (!slug || !title) {
+                return Response.json({ error: "Missing slug or title" }, { status: 400 });
+              }
+              return Response.json(await repo.renamePage(slug, title));
+            } catch (error) {
+              return errorResponse(error);
+            }
+          }
+
+          if (url.pathname === "/api/entity/merge" && req.method === "POST") {
+            try {
+              const body = await readJsonBody(req);
+              const sourceSlug = String(body.sourceSlug ?? "").trim();
+              const targetSlug = String(body.targetSlug ?? "").trim();
+              if (!sourceSlug || !targetSlug) {
+                return Response.json({ error: "Missing sourceSlug or targetSlug" }, { status: 400 });
+              }
+              return Response.json(await repo.mergePage(sourceSlug, targetSlug));
+            } catch (error) {
+              return errorResponse(error);
             }
           }
 
@@ -630,7 +671,7 @@ function getGraphHtml(): string {
     }
     
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif;
       background: #0f0f0f;
       color: #e0e0e0;
       overflow: hidden;
@@ -747,7 +788,8 @@ function getGraphHtml(): string {
     }
     
     .node-item {
-      padding: 8px 12px;
+      position: relative;
+      padding: 8px 8px 8px 12px;
       border-radius: 6px;
       cursor: pointer;
       margin-bottom: 4px;
@@ -756,6 +798,65 @@ function getGraphHtml(): string {
       gap: 8px;
       font-size: 13px;
       word-break: break-all;
+    }
+
+    .node-label {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .node-more {
+      width: 24px;
+      height: 24px;
+      border: none;
+      border-radius: 4px;
+      background: transparent;
+      color: #888;
+      cursor: pointer;
+      flex-shrink: 0;
+      font-size: 18px;
+      line-height: 20px;
+    }
+
+    .node-more:hover {
+      background: #333;
+      color: #fff;
+    }
+
+    #node-menu {
+      position: fixed;
+      z-index: 80;
+      min-width: 120px;
+      background: #1f1f1f;
+      border: 1px solid #3a3a3a;
+      border-radius: 6px;
+      padding: 4px;
+      display: none;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+    }
+
+    #node-menu.visible {
+      display: block;
+    }
+
+    #node-menu button {
+      width: 100%;
+      padding: 7px 10px;
+      border: none;
+      border-radius: 4px;
+      background: transparent;
+      color: #e0e0e0;
+      text-align: left;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    #node-menu button:hover {
+      background: #2f2f2f;
+    }
+
+    #node-menu button.danger {
+      color: #ff8a80;
     }
     
     .node-item:hover {
@@ -876,6 +977,13 @@ function getGraphHtml(): string {
     
     #close-detail:hover {
       color: #fff;
+    }
+
+    #detail-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
     }
     
     #detail-content {
@@ -1069,11 +1177,12 @@ function getGraphHtml(): string {
     /* Q&A Panel */
     #ask-panel {
       position: absolute;
-      bottom: 70px;
-      left: 50%;
-      transform: translateX(-50%);
+      top: 96px;
+      left: calc(50% - 260px);
       width: 520px;
+      min-width: 360px;
       max-width: calc(100vw - 40px);
+      max-height: min(720px, calc(100vh - 40px));
       background: #1a1a1a;
       border: 1px solid #333;
       border-radius: 12px;
@@ -1092,6 +1201,11 @@ function getGraphHtml(): string {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      cursor: move;
+      user-select: none;
+    }
+    #ask-header:hover {
+      background: #282828;
     }
     #ask-header h2 {
       font-size: 14px;
@@ -1150,7 +1264,8 @@ function getGraphHtml(): string {
     }
     #ask-result {
       padding: 16px;
-      max-height: 400px;
+      flex: 1;
+      min-height: 0;
       overflow-y: auto;
       font-size: 13px;
       line-height: 1.6;
@@ -1209,6 +1324,35 @@ function getGraphHtml(): string {
     #ask-result .loading {
       color: #888;
       font-style: italic;
+    }
+    .ask-resize-edge {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 10px;
+      cursor: ew-resize;
+      z-index: 5;
+    }
+    .ask-resize-edge.left {
+      left: -5px;
+    }
+    .ask-resize-edge.right {
+      right: -5px;
+    }
+    .ask-resize-corner {
+      position: absolute;
+      bottom: -5px;
+      width: 18px;
+      height: 18px;
+      z-index: 6;
+    }
+    .ask-resize-corner.left {
+      left: -5px;
+      cursor: nesw-resize;
+    }
+    .ask-resize-corner.right {
+      right: -5px;
+      cursor: nwse-resize;
     }
     #ask-result .markdown-content {
       font-size: 13px;
@@ -1352,6 +1496,10 @@ function getGraphHtml(): string {
       <div id="node-list"></div>
       <div id="sidebar-toggle">展开</div>
     </div>
+    <div id="node-menu">
+      <button id="node-menu-rename">修改</button>
+      <button id="node-menu-delete" class="danger">删除</button>
+    </div>
     <div id="graph-container">
       <div id="loading">
         <div class="spinner"></div>
@@ -1364,7 +1512,10 @@ function getGraphHtml(): string {
             <h2 id="detail-title">-</h2>
             <span class="type-badge" id="detail-type">-</span>
           </div>
-          <button id="close-detail">&times;</button>
+          <div id="detail-actions">
+            <button class="node-more" id="detail-more" title="更多">⋯</button>
+            <button id="close-detail">&times;</button>
+          </div>
         </div>
         <div id="detail-content"></div>
         <div id="resize-handle"></div>
@@ -1380,6 +1531,10 @@ function getGraphHtml(): string {
         <button class="toolbar-btn" id="btn-ask"> Ask</button>
       </div>
       <div id="ask-panel">
+        <div class="ask-resize-edge left" data-edge="left"></div>
+        <div class="ask-resize-edge right" data-edge="right"></div>
+        <div class="ask-resize-corner left" data-corner="left"></div>
+        <div class="ask-resize-corner right" data-corner="right"></div>
         <div id="ask-header">
           <h2>💡 Ask Ex-Brain</h2>
           <button id="ask-close">&times;</button>
@@ -1402,6 +1557,7 @@ function getGraphHtml(): string {
       note: '#9c27b0', deal: '#f44336', yc: '#ff5722',
       civic: '#00bcd4', other: '#607d8b',
     };
+    const uiFontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif';
 
     // ── Markdown parser ──
     function parseMarkdown(text) {
@@ -1433,6 +1589,7 @@ function getGraphHtml(): string {
     let highlightNodes = new Set();
     let highlightLinks = new Set();
     let hoverNode = null;
+    let menuNodeSlug = null;
 
     // Remap API edges → 3FG links
     function toLinks(edges) {
@@ -1443,33 +1600,69 @@ function getGraphHtml(): string {
     // ── Init ──
     async function init() {
       try {
-        const res = await fetch('/api/graph');
-        graphData = await res.json();
-
-        // Index nodes
-        nodeMap = {};
-        graphData.nodes.forEach(function(n) { nodeMap[n.id] = n; });
-
-        // Remap edges → links and cross-link neighbors
-        var links = toLinks(graphData.edges);
-        links.forEach(function(l) {
-          var a = nodeMap[l.source], b = nodeMap[l.target];
-          if (!a || !b) return;
-          if (!a.neighbors) { a.neighbors = []; a.edgeList = []; }
-          if (!b.neighbors) { b.neighbors = []; b.edgeList = []; }
-          if (!a.neighbors.includes(b)) { a.neighbors.push(b); b.neighbors.push(a); }
-          a.edgeList.push(l); b.edgeList.push(l);
-        });
-        graphData._links = links;
-
-        updateStats();
-        renderFilters();
-        renderNodeList();
+        await loadGraphData();
         create3DGraph();
         document.getElementById('loading').style.display = 'none';
       } catch (err) {
         document.getElementById('loading').innerHTML =
           '<div style="color:#f44336">Error: ' + escapeHtml(String(err)) + '</div>';
+      }
+    }
+
+    async function loadGraphData() {
+      const res = await fetch('/api/graph');
+      graphData = await res.json();
+
+      nodeMap = {};
+      graphData.nodes.forEach(function(n) { nodeMap[n.id] = n; });
+
+      var links = toLinks(graphData.edges);
+      links.forEach(function(l) {
+        var a = nodeMap[l.source], b = nodeMap[l.target];
+        if (!a || !b) return;
+        if (!a.neighbors) { a.neighbors = []; a.edgeList = []; }
+        if (!b.neighbors) { b.neighbors = []; b.edgeList = []; }
+        if (!a.neighbors.includes(b)) { a.neighbors.push(b); b.neighbors.push(a); }
+        a.edgeList.push(l); b.edgeList.push(l);
+      });
+      graphData._links = links;
+
+      updateStats();
+      renderFilters();
+      renderNodeList(document.getElementById('search-input').value);
+    }
+
+    function prepareGraphVisuals() {
+      var degrees = computeDegrees();
+      var maxDeg = Math.max(1);
+      var keys = Object.keys(degrees);
+      for (var i = 0; i < keys.length; i++) {
+        if (degrees[keys[i]] > maxDeg) maxDeg = degrees[keys[i]];
+      }
+
+      graphData.nodes.forEach(function(n) {
+        n.val = 12 + 36 * ((degrees[n.id]||0) / maxDeg);
+        n.color = typeColors[n.type] || typeColors.other;
+      });
+    }
+
+    async function reloadGraphData(nextSelectedSlug) {
+      hideNodeMenu();
+      selectedNode = nextSelectedSlug || null;
+      highlightNodes.clear();
+      highlightLinks.clear();
+      await loadGraphData();
+      prepareGraphVisuals();
+      selectedNode3D = selectedNode ? nodeMap[selectedNode] : null;
+      if (Graph) {
+        Graph.graphData({ nodes: graphData.nodes, links: graphData._links });
+        refreshGraph();
+      }
+      if (selectedNode && nodeMap[selectedNode]) {
+        selectedNode3D = nodeMap[selectedNode];
+        await selectNode(selectedNode);
+      } else {
+        document.getElementById('node-detail').classList.remove('visible');
       }
     }
 
@@ -1481,10 +1674,17 @@ function getGraphHtml(): string {
 
     function renderFilters() {
       const types = Object.keys(graphData.stats.types);
-      activeTypes = new Set(types);
+      if (activeTypes.size === 0) {
+        activeTypes = new Set(types);
+      } else {
+        var previousTypes = new Set(activeTypes);
+        activeTypes = new Set(types.filter(function(t) {
+          return previousTypes.has(t) || !document.querySelector('#filters input[data-type="' + t + '"]');
+        }));
+      }
       var container = document.getElementById('filters');
       container.innerHTML = types.map(function(t) {
-        return '<label><input type="checkbox" checked data-type="'+t+'">'+
+        return '<label><input type="checkbox" '+(activeTypes.has(t)?'checked ':'')+'data-type="'+t+'">'+
           '<span class="node-type-dot type-'+t+'"></span> '+t+'</label>';
       }).join('');
       container.querySelectorAll('input').forEach(function(inp) {
@@ -1508,11 +1708,36 @@ function getGraphHtml(): string {
       container.innerHTML = filtered.map(function(node) {
         return '<div class="node-item'+(selectedNode===node.id?' selected':'')+'" data-slug="'+node.id+'">'+
           '<span class="node-type-dot type-'+node.type+'"></span>'+
-          '<span>'+escapeHtml(node.label)+'</span></div>';
+          '<span class="node-label">'+escapeHtml(node.label)+'</span>'+
+          '<button class="node-more" title="更多" data-slug="'+node.id+'">⋯</button></div>';
       }).join('');
       container.querySelectorAll('.node-item').forEach(function(item) {
-        item.addEventListener('click', function() { selectNode(item.dataset.slug); });
+        item.addEventListener('click', function(e) {
+          if (e.target.closest('.node-more')) return;
+          selectAndFocusNode(item.dataset.slug);
+        });
       });
+      container.querySelectorAll('.node-more').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          showNodeMenu(btn.dataset.slug, btn);
+        });
+      });
+    }
+
+    function showNodeMenu(slug, anchor) {
+      var menu = document.getElementById('node-menu');
+      var rect = anchor.getBoundingClientRect();
+      menuNodeSlug = slug;
+      menu.style.left = Math.min(rect.right + 4, window.innerWidth - 130) + 'px';
+      menu.style.top = Math.min(rect.top, window.innerHeight - 90) + 'px';
+      menu.classList.add('visible');
+    }
+
+    function hideNodeMenu() {
+      document.getElementById('node-menu').classList.remove('visible');
+      menuNodeSlug = null;
     }
 
     function computeDegrees() {
@@ -1532,15 +1757,7 @@ function getGraphHtml(): string {
 
     // ── 3D Graph ──
     function create3DGraph() {
-      var degrees = computeDegrees();
-      var maxDeg = Math.max(1);
-      var keys = Object.keys(degrees);
-      for (var i = 0; i < keys.length; i++) { if (degrees[keys[i]] > maxDeg) maxDeg = degrees[keys[i]]; }
-
-      graphData.nodes.forEach(function(n) {
-        n.val = 12 + 36 * ((degrees[n.id]||0) / maxDeg);
-        n.color = typeColors[n.type] || typeColors.other;
-      });
+      prepareGraphVisuals();
 
       var container = document.getElementById('graph-3d');
       Graph = new ForceGraph3D(container, { controlType: 'orbit' })
@@ -1566,6 +1783,7 @@ function getGraphHtml(): string {
           try {
             var sprite = new SpriteText(text);
             sprite.material.depthWrite = false;
+            sprite.fontFace = uiFontFamily;
             sprite.color = n.color || '#fff';
             sprite.textHeight = n === selectedNode3D ? 12 : 8;
             sprite.center.y = -0.6;
@@ -1671,10 +1889,35 @@ function getGraphHtml(): string {
 
     function flyToNode(node) {
       if (!Graph) return;
-      Graph.cameraPosition({x:node.x,y:node.y,z:node.z+40},{x:node.x,y:node.y,z:node.z},1200);
+      var cam = Graph.camera();
+      var controls = Graph.controls();
+      var target = controls ? controls.target : { x: 0, y: 0, z: 0 };
+      var dx = cam.position.x - target.x;
+      var dy = cam.position.y - target.y;
+      var dz = cam.position.z - target.z;
+      var len = Math.sqrt(dx*dx + dy*dy + dz*dz) || 1;
+      var distance = Math.max(70, Math.min(180, len));
+      Graph.cameraPosition(
+        {
+          x: node.x + (dx / len) * distance,
+          y: node.y + (dy / len) * distance,
+          z: node.z + (dz / len) * distance,
+        },
+        { x: node.x, y: node.y, z: node.z },
+        1200,
+      );
     }
 
     // ── Node selection ──
+    async function selectAndFocusNode(slug) {
+      var node = nodeMap[slug];
+      if (node) {
+        selectedNode3D = node;
+        flyToNode(node);
+      }
+      await selectNode(slug);
+    }
+
     async function selectNode(slug) {
       selectedNode = slug;
       renderNodeList(document.getElementById('search-input').value);
@@ -1750,7 +1993,7 @@ function getGraphHtml(): string {
       }
       content.innerHTML = html;
       content.querySelectorAll('a[data-slug]').forEach(function(a) {
-        a.addEventListener('click', function(e) { e.preventDefault(); selectNode(a.dataset.slug); });
+        a.addEventListener('click', function(e) { e.preventDefault(); selectAndFocusNode(a.dataset.slug); });
       });
       if (!detail.style.left) {
         var cr = document.getElementById('graph-container').getBoundingClientRect();
@@ -1765,7 +2008,86 @@ function getGraphHtml(): string {
       div.textContent = text||''; return div.innerHTML;
     }
 
+    function nodeBySlug(slug) {
+      return graphData.nodes.find(function(n) { return n.id === slug; }) || null;
+    }
+
+    async function postJson(url, body) {
+      var res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      var data = await res.json().catch(function() { return {}; });
+      if (!res.ok) {
+        throw new Error(data.error || 'Request failed');
+      }
+      return data;
+    }
+
+    async function renameSelectedEntity(slug) {
+      var node = nodeBySlug(slug);
+      var currentTitle = node ? node.title || node.label : slug;
+      var title = prompt('修改实体名称', currentTitle);
+      if (title === null) return;
+      title = title.trim();
+      if (!title) {
+        alert('实体名称不能为空');
+        return;
+      }
+      try {
+        var result = await postJson('/api/entity/rename', { slug: slug, title: title });
+        await reloadGraphData(result.slug);
+        if (result.merged) {
+          alert('已合并到现有实体');
+        }
+      } catch (err) {
+        alert('修改失败：' + (err instanceof Error ? err.message : String(err)));
+      }
+    }
+
+    async function deleteSelectedEntity(slug) {
+      var targetSlug = prompt('删除实体会将内容和关系合并到另一个实体。请输入目标实体 slug');
+      if (targetSlug === null) return;
+      targetSlug = targetSlug.trim();
+      if (!targetSlug || targetSlug === slug) {
+        alert('请输入不同的目标实体 slug');
+        return;
+      }
+      if (!nodeMap[targetSlug]) {
+        alert('目标实体不存在');
+        return;
+      }
+      if (!confirm('确认删除并合并到 ' + targetSlug + '？')) return;
+      try {
+        var result = await postJson('/api/entity/merge', { sourceSlug: slug, targetSlug: targetSlug });
+        await reloadGraphData(result.slug);
+      } catch (err) {
+        alert('删除失败：' + (err instanceof Error ? err.message : String(err)));
+      }
+    }
+
     // ── Event listeners ──
+    document.addEventListener('click', function(e) {
+      if (!e.target.closest('#node-menu') && !e.target.closest('.node-more')) {
+        hideNodeMenu();
+      }
+    });
+    document.getElementById('detail-more').addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (selectedNode) showNodeMenu(selectedNode, e.currentTarget);
+    });
+    document.getElementById('node-menu-rename').addEventListener('click', function() {
+      var slug = menuNodeSlug;
+      hideNodeMenu();
+      if (slug) renameSelectedEntity(slug);
+    });
+    document.getElementById('node-menu-delete').addEventListener('click', function() {
+      var slug = menuNodeSlug;
+      hideNodeMenu();
+      if (slug) deleteSelectedEntity(slug);
+    });
     document.getElementById('search-input').addEventListener('input', function(e) { renderNodeList(e.target.value); });
     document.getElementById('close-detail').addEventListener('click', function() {
       document.getElementById('node-detail').classList.remove('visible');
@@ -1789,6 +2111,7 @@ function getGraphHtml(): string {
         try {
           var sprite = new SpriteText(text);
           sprite.material.depthWrite = false;
+          sprite.fontFace = uiFontFamily;
           sprite.color = n.color || '#fff';
           sprite.textHeight = n === selectedNode3D ? 12 : 8;
           sprite.center.y = -0.6;
@@ -1815,10 +2138,12 @@ function getGraphHtml(): string {
     var askClose = document.getElementById('ask-close');
     var askBtn = document.getElementById('btn-ask');
     var isStreaming = false;
+    var askPositioned = false;
 
     askBtn.addEventListener('click', function() {
       askPanel.classList.toggle('visible');
       if (askPanel.classList.contains('visible')) {
+        ensureAskPanelPosition();
         setTimeout(function() { askInput.focus(); }, 100);
       }
     });
@@ -1829,6 +2154,22 @@ function getGraphHtml(): string {
         window._askAbort && window._askAbort.abort();
       }
     });
+
+    function ensureAskPanelPosition() {
+      if (askPositioned) return;
+      var width = askPanel.offsetWidth || 520;
+      askPanel.style.left = Math.max(20, Math.round((window.innerWidth - width) / 2)) + 'px';
+      askPanel.style.top = Math.max(20, window.innerHeight - 520) + 'px';
+      askPositioned = true;
+    }
+
+    function clampAskPanel() {
+      var rect = askPanel.getBoundingClientRect();
+      var left = Math.max(10, Math.min(window.innerWidth - rect.width - 10, rect.left));
+      var top = Math.max(10, Math.min(window.innerHeight - rect.height - 10, rect.top));
+      askPanel.style.left = left + 'px';
+      askPanel.style.top = top + 'px';
+    }
 
     function askQuestion() {
       var question = askInput.value.trim();
@@ -1897,7 +2238,7 @@ function getGraphHtml(): string {
           askResult.querySelectorAll('.ask-citation').forEach(function(el) {
             el.addEventListener('click', function(e) {
               e.preventDefault();
-              selectNode(el.dataset.citeSlug);
+              selectAndFocusNode(el.dataset.citeSlug);
             });
           });
         }
@@ -2044,7 +2385,7 @@ function getGraphHtml(): string {
     function bindSourceClicks() {
       askResult.querySelectorAll('.source-item').forEach(function(item) {
         item.addEventListener('click', function() {
-          selectNode(item.dataset.slug);
+          selectAndFocusNode(item.dataset.slug);
         });
       });
     }
@@ -2062,11 +2403,13 @@ function getGraphHtml(): string {
     var detailHeader = document.getElementById('detail-header');
     var resizeHandle = document.getElementById('resize-handle');
     var isDragging = false, isResizing = false;
+    var isAskDragging = false, isAskResizing = false, askResizeEdge = null, askResizeCorner = null;
     var dragStartX, dragStartY, elemStartX, elemStartY;
     var resizeStartX, resizeStartY, startWidth, startHeight;
+    var askStartX, askStartY, askStartLeft, askStartTop, askStartWidth, askStartHeight;
 
     detailHeader.addEventListener('mousedown', function(e) {
-      if (e.target.id === 'close-detail') return;
+      if (e.target.closest('button')) return;
       isDragging = true;
       dragStartX = e.clientX; dragStartY = e.clientY;
       elemStartX = parseInt(nodeDetail.style.left)||nodeDetail.getBoundingClientRect().left;
@@ -2080,6 +2423,43 @@ function getGraphHtml(): string {
       elemStartX = parseInt(nodeDetail.style.left)||nodeDetail.getBoundingClientRect().left;
       elemStartY = parseInt(nodeDetail.style.top)||nodeDetail.getBoundingClientRect().top;
       e.preventDefault(); e.stopPropagation();
+    });
+    document.getElementById('ask-header').addEventListener('mousedown', function(e) {
+      if (e.target.id === 'ask-close') return;
+      isAskDragging = true;
+      askStartX = e.clientX; askStartY = e.clientY;
+      var rect = askPanel.getBoundingClientRect();
+      askStartLeft = rect.left; askStartTop = rect.top;
+      e.preventDefault();
+    });
+    document.querySelectorAll('.ask-resize-edge').forEach(function(edge) {
+      edge.addEventListener('mousedown', function(e) {
+        isAskResizing = true;
+        askResizeEdge = edge.dataset.edge;
+        askStartX = e.clientX;
+        var rect = askPanel.getBoundingClientRect();
+        askStartLeft = rect.left;
+        askStartWidth = rect.width;
+        askStartHeight = rect.height;
+        askResizeCorner = null;
+        e.preventDefault();
+        e.stopPropagation();
+      });
+    });
+    document.querySelectorAll('.ask-resize-corner').forEach(function(corner) {
+      corner.addEventListener('mousedown', function(e) {
+        isAskResizing = true;
+        askResizeCorner = corner.dataset.corner;
+        askResizeEdge = corner.dataset.corner;
+        askStartX = e.clientX;
+        askStartY = e.clientY;
+        var rect = askPanel.getBoundingClientRect();
+        askStartLeft = rect.left;
+        askStartWidth = rect.width;
+        askStartHeight = rect.height;
+        e.preventDefault();
+        e.stopPropagation();
+      });
     });
     document.addEventListener('mousemove', function(e) {
       if (isDragging) {
@@ -2095,8 +2475,35 @@ function getGraphHtml(): string {
         nodeDetail.style.width  = newWidth+'px';
         nodeDetail.style.height = newHeight+'px';
       }
+      if (isAskDragging) {
+        askPanel.style.left = Math.max(10, Math.min(window.innerWidth - askPanel.offsetWidth - 10, askStartLeft + e.clientX - askStartX)) + 'px';
+        askPanel.style.top = Math.max(10, Math.min(window.innerHeight - askPanel.offsetHeight - 10, askStartTop + e.clientY - askStartY)) + 'px';
+      }
+      if (isAskResizing) {
+        var askDx = e.clientX - askStartX;
+        var askDy = e.clientY - askStartY;
+        var minWidth = 360;
+        var minHeight = 180;
+        var maxWidth = window.innerWidth - 20;
+        var maxHeight = Math.min(720, window.innerHeight - askStartTop - 10);
+        if (askResizeEdge === 'left') {
+          var nextLeft = Math.max(10, Math.min(askStartLeft + askStartWidth - minWidth, askStartLeft + askDx));
+          var nextWidth = Math.max(minWidth, Math.min(maxWidth, askStartWidth + askStartLeft - nextLeft));
+          askPanel.style.left = nextLeft + 'px';
+          askPanel.style.width = nextWidth + 'px';
+        } else {
+          askPanel.style.width = Math.max(minWidth, Math.min(maxWidth - askStartLeft, askStartWidth + askDx)) + 'px';
+        }
+        if (askResizeCorner) {
+          askPanel.style.height = Math.max(minHeight, Math.min(maxHeight, askStartHeight + askDy)) + 'px';
+        }
+      }
     });
-    document.addEventListener('mouseup', function() { isDragging = false; isResizing = false; });
+    document.addEventListener('mouseup', function() {
+      isDragging = false; isResizing = false;
+      if (isAskDragging || isAskResizing) clampAskPanel();
+      isAskDragging = false; isAskResizing = false; askResizeEdge = null; askResizeCorner = null;
+    });
 
     // ── Sidebar Float & Toggle ──
     var sidebar = document.getElementById('sidebar');

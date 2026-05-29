@@ -221,3 +221,169 @@ describe("ebrain deletePage (internal)", () => {
     expect(await sharedRepo.timeline(`${id}-delete`)).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// entity rename / merge
+// ---------------------------------------------------------------------------
+
+describe("ebrain entity rename and merge (internal)", () => {
+  test("renamePage changes slug and preserves relationships", async () => {
+    const id = uid();
+    await sharedRepo.putPage({
+      slug: `people/${id}-jon-smith`,
+      type: "person",
+      title: "Jon Smith",
+      compiledTruth: "Old spelling",
+      timeline: "",
+      frontmatter: {},
+    });
+    await sharedRepo.putPage({
+      slug: `companies/${id}-acme`,
+      type: "company",
+      title: "Acme",
+      compiledTruth: "Company",
+      timeline: "",
+      frontmatter: {},
+    });
+    await sharedRepo.link(`people/${id}-jon-smith`, `companies/${id}-acme`, "works_at");
+
+    const result = await sharedRepo.renamePage(`people/${id}-jon-smith`, `${id} John Smith`);
+
+    const renamedSlug = `people/${id}-john-smith`;
+    expect(result).toEqual({ slug: renamedSlug, merged: false });
+    expect(await sharedRepo.getPage(`people/${id}-jon-smith`)).toBeNull();
+    const renamed = await sharedRepo.getPage(renamedSlug);
+    expect(renamed?.title).toBe(`${id} John Smith`);
+    expect(await sharedRepo.outgoingLinks(renamedSlug)).toEqual([
+      { slug: `companies/${id}-acme`, context: "works_at" },
+    ]);
+  });
+
+  test("renamePage merges into an existing entity and transfers related data", async () => {
+    const id = uid();
+    await sharedRepo.putPage({
+      slug: `people/${id}-jon-smith`,
+      type: "person",
+      title: "Jon Smith",
+      compiledTruth: "Old spelling facts",
+      timeline: "Old timeline",
+      frontmatter: {},
+    });
+    await sharedRepo.putPage({
+      slug: `people/${id}-john-smith`,
+      type: "person",
+      title: `${id} John Smith`,
+      compiledTruth: "Canonical facts",
+      timeline: "Canonical timeline",
+      frontmatter: {},
+    });
+    await sharedRepo.putPage({
+      slug: `companies/${id}-acme`,
+      type: "company",
+      title: "Acme",
+      compiledTruth: "Company",
+      timeline: "",
+      frontmatter: {},
+    });
+    await sharedRepo.link(`people/${id}-jon-smith`, `companies/${id}-acme`, "works_at");
+    await sharedRepo.link(`people/${id}-john-smith`, `companies/${id}-acme`, "advisor");
+    await sharedRepo.link(`companies/${id}-acme`, `people/${id}-jon-smith`, "mentions");
+    await sharedRepo.tag(`people/${id}-jon-smith`, "alias");
+    await sharedRepo.timelineAdd({ pageSlug: `people/${id}-jon-smith`, date: "2025-01-01", source: "m", summary: "Old event", detail: "" });
+    await sharedRepo.writeRaw(`people/${id}-jon-smith`, "source", { old: true });
+
+    const result = await sharedRepo.renamePage(`people/${id}-jon-smith`, `${id} John Smith`);
+
+    const targetSlug = `people/${id}-john-smith`;
+    expect(result).toEqual({ slug: targetSlug, merged: true });
+    expect(await sharedRepo.getPage(`people/${id}-jon-smith`)).toBeNull();
+    const target = await sharedRepo.getPage(targetSlug);
+    expect(target?.compiledTruth).toContain("Canonical facts");
+    expect(target?.compiledTruth).toContain("Old spelling facts");
+    expect(await sharedRepo.tags(targetSlug)).toContain("alias");
+    expect((await sharedRepo.timeline(targetSlug)).map((entry) => entry.summary)).toContain("Old event");
+    expect((await sharedRepo.readRaw(targetSlug)) as unknown[]).toHaveLength(1);
+
+    const outgoing = await sharedRepo.outgoingLinks(targetSlug);
+    expect(outgoing).toHaveLength(1);
+    const mergedLink = outgoing[0]!;
+    expect(mergedLink.slug).toBe(`companies/${id}-acme`);
+    expect(mergedLink.context).toContain("advisor");
+    expect(mergedLink.context).toContain("works_at");
+    expect(await sharedRepo.backlinks(targetSlug)).toContain(`companies/${id}-acme`);
+  });
+
+  test("mergePage deletes the source entity and transfers relationships to target", async () => {
+    const id = uid();
+    await sharedRepo.putPage({
+      slug: `people/${id}-duplicate`,
+      type: "person",
+      title: "Duplicate",
+      compiledTruth: "Duplicate facts",
+      timeline: "",
+      frontmatter: {},
+    });
+    await sharedRepo.putPage({
+      slug: `people/${id}-canonical`,
+      type: "person",
+      title: "Canonical",
+      compiledTruth: "Canonical facts",
+      timeline: "",
+      frontmatter: {},
+    });
+    await sharedRepo.putPage({
+      slug: `companies/${id}-acme`,
+      type: "company",
+      title: "Acme",
+      compiledTruth: "Company",
+      timeline: "",
+      frontmatter: {},
+    });
+    await sharedRepo.link(`people/${id}-duplicate`, `companies/${id}-acme`, "works_at");
+
+    const result = await sharedRepo.mergePage(`people/${id}-duplicate`, `people/${id}-canonical`);
+
+    expect(result).toEqual({ slug: `people/${id}-canonical`, merged: true });
+    expect(await sharedRepo.getPage(`people/${id}-duplicate`)).toBeNull();
+    expect(await sharedRepo.outgoingLinks(`people/${id}-canonical`)).toEqual([
+      { slug: `companies/${id}-acme`, context: "works_at" },
+    ]);
+  });
+
+  test("mergePage rolls back if reference migration fails", async () => {
+    const id = uid();
+    await sharedRepo.putPage({
+      slug: `people/${id}-duplicate`,
+      type: "person",
+      title: "Duplicate",
+      compiledTruth: "Duplicate facts",
+      timeline: "",
+      frontmatter: {},
+    });
+    await sharedRepo.putPage({
+      slug: `people/${id}-canonical`,
+      type: "person",
+      title: "Canonical",
+      compiledTruth: "Canonical facts",
+      timeline: "",
+      frontmatter: {},
+    });
+    const originalExecute = sharedDb.client.execute.bind(sharedDb.client);
+    sharedDb.client.execute = (async (sql: string, params?: unknown[]) => {
+      if (sql.includes("UPDATE raw_data")) {
+        throw new Error("forced raw_data migration failure");
+      }
+      return originalExecute(sql, params);
+    }) as typeof sharedDb.client.execute;
+
+    try {
+      await expect(sharedRepo.mergePage(`people/${id}-duplicate`, `people/${id}-canonical`)).rejects.toThrow();
+
+      expect(await sharedRepo.getPage(`people/${id}-duplicate`)).not.toBeNull();
+      const target = await sharedRepo.getPage(`people/${id}-canonical`);
+      expect(target?.compiledTruth).toBe("Canonical facts");
+    } finally {
+      sharedDb.client.execute = originalExecute as typeof sharedDb.client.execute;
+    }
+  });
+});

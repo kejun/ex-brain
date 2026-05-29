@@ -89,3 +89,23 @@ export function normalizeLongSlug(slug: string): string {
   }
   return slug;
 }
+
+type EntitySlugType = "person" | "company" | "project" | "organization" | "event" | "other";
+
+const ENTITY_TYPE_PREFIX: Record<EntitySlugType, string> = {
+  person: "people",
+  company: "companies",
+  project: "projects",
+  organization: "organizations",
+  event: "events",
+  other: "entities",
+};
+
+export function entitySlugFromName(name: string, type: EntitySlugType | string): string {
+  const prefix = ENTITY_TYPE_PREFIX[type as EntitySlugType] ?? "entities";
+  const slugPart = name
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fff]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return `${prefix}/${slugPart || "untitled"}`;
+}
