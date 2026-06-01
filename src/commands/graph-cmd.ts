@@ -61,7 +61,7 @@ async function getGraphData(repo: BrainRepository): Promise<GraphData> {
     const rawType = page.type || "other";
     const type = normalizeType(rawType, page.slug);
     typeCounts[type] = (typeCounts[type] || 0) + 1;
-    
+
     nodes.push({
       id: page.slug,
       label: page.title || page.slug.split("/").pop() || page.slug,
@@ -74,7 +74,7 @@ async function getGraphData(repo: BrainRepository): Promise<GraphData> {
   // Create edges from links
   for (const row of linksRows || []) {
     const r = row as { from_slug: string; to_slug: string; context: string };
-    
+
     // Extract relation type from context
     const context = r.context || "";
     const labelMatch = context.match(/^\[([^\]]+)\]/);
@@ -1557,6 +1557,18 @@ function getGraphHtml(): string {
       note: '#9c27b0', deal: '#f44336', yc: '#ff5722',
       civic: '#00bcd4', other: '#607d8b',
     };
+    const typeClusterCenters = {
+      person: { x: -120, y: 70, z: 40 },
+      company: { x: 120, y: 70, z: -20 },
+      project: { x: -120, y: -70, z: -30 },
+      organization: { x: 120, y: -70, z: 40 },
+      event: { x: 0, y: 120, z: -90 },
+      note: { x: 0, y: -120, z: 90 },
+      deal: { x: 0, y: 0, z: 140 },
+      yc: { x: -180, y: 0, z: -90 },
+      civic: { x: 180, y: 0, z: 90 },
+      other: { x: 0, y: 0, z: 0 },
+    };
     const uiFontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif';
 
     // ── Markdown parser ──
@@ -1656,6 +1668,7 @@ function getGraphHtml(): string {
       selectedNode3D = selectedNode ? nodeMap[selectedNode] : null;
       if (Graph) {
         Graph.graphData({ nodes: graphData.nodes, links: graphData._links });
+        applyClusterForceLayout();
         refreshGraph();
       }
       if (selectedNode && nodeMap[selectedNode]) {
@@ -1755,6 +1768,105 @@ function getGraphHtml(): string {
       Graph.refresh();
     }
 
+    function hexToRgb(hex) {
+      var h = (hex || '#ffffff').replace('#', '');
+      if (h.length === 3) h = h.split('').map(function(c) { return c + c; }).join('');
+      var num = parseInt(h, 16);
+      return {
+        r: (num >> 16) & 255,
+        g: (num >> 8) & 255,
+        b: num & 255,
+      };
+    }
+
+    function rgba(hex, alpha) {
+      var rgb = hexToRgb(hex);
+      return 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ',' + alpha + ')';
+    }
+
+    function hasSelectedFocus() {
+      return Boolean(selectedNode3D);
+    }
+
+    function isFocusedNode(node) {
+      return !hasSelectedFocus() || highlightNodes.has(node);
+    }
+
+    function nodeDisplayColor(node) {
+      var base = node === selectedNode3D ? '#ffffff' : (highlightNodes.has(node) ? '#ffcc44' : (node.color || '#ffffff'));
+      return rgba(base, isFocusedNode(node) ? 1 : 0.3);
+    }
+
+    function linkDisplayColor(link) {
+      if (!hasSelectedFocus()) return 'rgba(119,119,119,0.5)';
+      return highlightLinks.has(link) ? 'rgba(119,119,119,1)' : 'rgba(119,119,119,0.375)';
+    }
+
+    function createNodeLabelSprite(node) {
+      if (!labelsVisible) return null;
+      var text = (node.label || node.id || '').toString();
+      if (text.length > 16) text = text.slice(0, 16) + '…';
+      if (!text) return null;
+      try {
+        var sprite = new SpriteText(text);
+        sprite.material.depthWrite = false;
+        sprite.material.transparent = true;
+        sprite.material.opacity = isFocusedNode(node) ? 1 : 0.3;
+        sprite.fontFace = uiFontFamily;
+        sprite.color = node.color || '#fff';
+        sprite.textHeight = node === selectedNode3D ? 10 : 6;
+        sprite.center.y = -0.6;
+        return sprite;
+      } catch(e) {
+        console.warn('SpriteText error for node', node.id, e);
+        return null;
+      }
+    }
+
+    function clusterCenter(type) {
+      return typeClusterCenters[type] || typeClusterCenters.other;
+    }
+
+    function createClusterForce(strength) {
+      var nodes = [];
+      function force(alpha) {
+        var pull = strength * alpha;
+        nodes.forEach(function(n) {
+          var center = clusterCenter(n.type);
+          n.vx += (center.x - (n.x || 0)) * pull;
+          n.vy += (center.y - (n.y || 0)) * pull;
+          n.vz += (center.z - (n.z || 0)) * pull;
+        });
+      }
+      force.initialize = function(nextNodes) {
+        nodes = nextNodes || [];
+      };
+      return force;
+    }
+
+    function applyClusterForce(strength) {
+      if (!Graph) return;
+      Graph.d3Force('cluster', createClusterForce(strength));
+    }
+
+    function clearFixedPositions() {
+      graphData.nodes.forEach(function(n) {
+        delete n.fx; delete n.fy; delete n.fz;
+      });
+    }
+
+    function applyClusterForceLayout() {
+      if (!Graph) return;
+      clearFixedPositions();
+      var linkForce = Graph.d3Force('link');
+      if (linkForce) linkForce.distance(42).strength(0.55);
+      var chargeForce = Graph.d3Force('charge');
+      if (chargeForce) chargeForce.strength(-145);
+      var centerForce = Graph.d3Force('center');
+      if (centerForce) centerForce.strength(0.035);
+      applyClusterForce(0.16);
+    }
+
     // ── 3D Graph ──
     function create3DGraph() {
       prepareGraphVisuals();
@@ -1771,37 +1883,17 @@ function getGraphHtml(): string {
         .d3VelocityDecay(0.6)
         .nodeRelSize(1)
         .nodeVal('val')
-        .nodeColor(function(n) {
-          if (n === selectedNode3D) return '#ffffff';
-          return highlightNodes.has(n) ? '#ffcc44' : n.color;
-        })
-        .nodeThreeObject(function(n) {
-          if (!labelsVisible) return null;
-          var text = (n.label || n.id || '').toString();
-          if (text.length > 16) text = text.slice(0, 16) + '…';
-          if (!text) return null;
-          try {
-            var sprite = new SpriteText(text);
-            sprite.material.depthWrite = false;
-            sprite.fontFace = uiFontFamily;
-            sprite.color = n.color || '#fff';
-            sprite.textHeight = n === selectedNode3D ? 12 : 8;
-            sprite.center.y = -0.6;
-            return sprite;
-          } catch(e) {
-            console.warn('SpriteText error for node', n.id, e);
-            return null;
-          }
-        })
+        .nodeColor(nodeDisplayColor)
+        .nodeThreeObject(createNodeLabelSprite)
         .nodeThreeObjectExtend(true)
         .nodeLabel(function(n) {
           var label = (n.label || n.id || '').toString();
           if (label.length > 16) label = label.slice(0, 16) + '…';
           return label + '  (' + n.id + ')';
         })
-        .linkColor(function(l) { return '#777'; })
-        .linkWidth(function(l) { return highlightLinks.has(l) ? 1.8 : 0.8; })
-        .linkOpacity(0.4)
+        .linkColor(linkDisplayColor)
+        .linkWidth(0.8)
+        .linkOpacity(0.8)
         .linkMaterial(null)
         .linkDirectionalArrowLength(0)
         .nodeVisibility(function(n) { return activeTypes.has(n.type); })
@@ -1831,14 +1923,7 @@ function getGraphHtml(): string {
         })
         .enableNavigationControls(true);
 
-      // Optimize 3D layout: compact nodes with stronger attraction & weaker repulsion
-      // Note: d3Force() returns the d3-force object, not the Graph instance, so we call them separately
-      var linkForce = Graph.d3Force('link');
-      if (linkForce) linkForce.distance(30).strength(0.8);
-      var chargeForce = Graph.d3Force('charge');
-      if (chargeForce) chargeForce.strength(-120);
-      var centerForce = Graph.d3Force('center');
-      if (centerForce) centerForce.strength(0.08);
+      applyClusterForceLayout();
 
       // Auto-rotate
       // Controls are created asynchronously by three-render-objects.
@@ -1909,6 +1994,16 @@ function getGraphHtml(): string {
     }
 
     // ── Node selection ──
+    function clearSelection() {
+      document.getElementById('node-detail').classList.remove('visible');
+      selectedNode = null;
+      selectedNode3D = null;
+      highlightNodes.clear();
+      highlightLinks.clear();
+      refreshGraph();
+      renderNodeList(document.getElementById('search-input').value);
+    }
+
     async function selectAndFocusNode(slug) {
       var node = nodeMap[slug];
       if (node) {
@@ -2090,11 +2185,7 @@ function getGraphHtml(): string {
     });
     document.getElementById('search-input').addEventListener('input', function(e) { renderNodeList(e.target.value); });
     document.getElementById('close-detail').addEventListener('click', function() {
-      document.getElementById('node-detail').classList.remove('visible');
-      selectedNode = null; selectedNode3D = null;
-      highlightNodes.clear(); highlightLinks.clear();
-      refreshGraph();
-      renderNodeList(document.getElementById('search-input').value);
+      clearSelection();
     });
     document.getElementById('btn-fit').addEventListener('click', function() {
       if (Graph) Graph.zoomToFit(600, 60, function(n) { return activeTypes.has(n.type); });
@@ -2103,23 +2194,7 @@ function getGraphHtml(): string {
     // Toggle labels visibility via switch
     document.getElementById('toggle-labels').addEventListener('change', function() {
       labelsVisible = this.checked;
-      Graph.nodeThreeObject(function(n) {
-        if (!labelsVisible) return null;
-        var text = (n.label || n.id || '').toString();
-        if (text.length > 16) text = text.slice(0, 16) + '\u2026';
-        if (!text) return null;
-        try {
-          var sprite = new SpriteText(text);
-          sprite.material.depthWrite = false;
-          sprite.fontFace = uiFontFamily;
-          sprite.color = n.color || '#fff';
-          sprite.textHeight = n === selectedNode3D ? 12 : 8;
-          sprite.center.y = -0.6;
-          return sprite;
-        } catch(e) {
-          return null;
-        }
-      });
+      Graph.nodeThreeObject(createNodeLabelSprite);
       Graph.refresh();
     });
 
@@ -2139,6 +2214,14 @@ function getGraphHtml(): string {
     var askBtn = document.getElementById('btn-ask');
     var isStreaming = false;
     var askPositioned = false;
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key !== 'Escape') return;
+      if (askPanel.classList.contains('visible')) return;
+      if (!selectedNode && !selectedNode3D) return;
+      e.preventDefault();
+      clearSelection();
+    });
 
     askBtn.addEventListener('click', function() {
       askPanel.classList.toggle('visible');

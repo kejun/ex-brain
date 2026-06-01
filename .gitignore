@@ -47,3 +47,6 @@ bin/
 
 code-review-*.*
 pi-session-*.html
+
+# understand-anything tool output
+.understand-anything/
