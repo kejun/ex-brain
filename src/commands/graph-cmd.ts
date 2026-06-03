@@ -1873,10 +1873,9 @@ function getGraphHtml(): string {
 
       var container = document.getElementById('graph-3d');
       Graph = new ForceGraph3D(container, { controlType: 'orbit' })
-        .graphData({ nodes: graphData.nodes, links: graphData._links })
         .backgroundColor('#000000')
         .showNavInfo(false)
-        .warmupTicks(300)
+        .warmupTicks(80)
         .cooldownTicks(100)
         .cooldownTime(1500)
         .d3AlphaDecay(0.05)
@@ -1902,6 +1901,7 @@ function getGraphHtml(): string {
           var tt = (typeof l.target === 'object') ? l.target.type : (nodeMap[l.target]||{}).type;
           return activeTypes.has(st) && activeTypes.has(tt);
         })
+        .graphData({ nodes: graphData.nodes, links: graphData._links })
         .onNodeClick(function(node) {
           var now = Date.now(), last = window._fgLastClick || 0;
           window._fgLastClick = now;
