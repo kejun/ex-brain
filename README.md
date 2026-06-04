@@ -31,6 +31,10 @@ Use with ex-brain:
 # After clipping with MarkSnip, import to knowledge base
 cat article.md | ebrain put articles/slug --stdin
 
+# Or import HTML directly; ex-brain extracts the readable article and converts it to Markdown
+ebrain put articles/html-page --file article.html
+cat article.html | ebrain put articles/html-page --stdin --format html
+
 # Or intelligent compilation
 ebrain compile companies/river-ai --file article.md --source web_clip
 ```
@@ -54,6 +58,7 @@ ebrain init
 
 # Write a page
 ebrain put my/note --file note.md
+ebrain put articles/page --file article.html
 
 # Knowledge graph visualization
 ebrain graph                    # Start graph Web UI (http://localhost:3000)

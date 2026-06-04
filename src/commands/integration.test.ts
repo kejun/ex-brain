@@ -563,9 +563,9 @@ describe("ebrain put — document auto-detect", () => {
     expect(result.kind).toBe("text");
   });
 
-  test("put with a .html file auto-extracts text", { timeout: 30000 }, async () => {
+  test("put with a .html file converts to markdown", { timeout: 30000 }, async () => {
     const dbPath = await mkTestDb();
-    const html = `<!DOCTYPE html><html><head><title>Test Page</title></head><body><h1>Hello World</h1><p>This is a test paragraph.</p></body></html>`;
+    const html = `<!DOCTYPE html><html><head><title>Test Page</title></head><body><article><h1>Hello World</h1><p>This is a test <a href="/article">paragraph</a>.</p><img src="/hero.png" alt="Hero"></article></body></html>`;
     const file = join(dirname(dbPath), "test-page.html");
     await writeFile(file, html);
 
@@ -574,6 +574,27 @@ describe("ebrain put — document auto-detect", () => {
     expect(result.kind).toBe("html");
     expect(result.ok).toBe(true);
     expect(result.contentLength).toBeGreaterThan(0);
+
+    const page = parseJson((await ebrain(dbPath, ["get", result.slug, "--json"])).stdout) as any;
+    expect(page.compiledTruth).toContain("# Hello World");
+    expect(page.compiledTruth).toContain("[paragraph](");
+    expect(page.compiledTruth).toContain("![Hero](");
+  });
+
+  test("put with --stdin --format html imports an HTML string", { timeout: 30000 }, async () => {
+    const dbPath = await mkTestDb();
+    const html = `<!DOCTYPE html><html><body><article><h1>HTML Stdin</h1><p>Read the <a href="https://example.com/doc">doc</a>.</p><img src="https://example.com/pic.png" alt="Pic"></article></body></html>`;
+
+    const r = await ebrain(dbPath, ["put", "clips/html-stdin", "--stdin", "--format", "html", "--json"], { stdin: html });
+    const result = parseJson(r.stdout) as any;
+    expect(result.kind).toBe("html");
+    expect(result.sourceType).toBe("stdin");
+    expect(result.ok).toBe(true);
+
+    const page = parseJson((await ebrain(dbPath, ["get", "clips/html-stdin", "--json"])).stdout) as any;
+    expect(page.compiledTruth).toContain("# HTML Stdin");
+    expect(page.compiledTruth).toContain("[doc](https://example.com/doc)");
+    expect(page.compiledTruth).toContain("![Pic](https://example.com/pic.png)");
   });
 });
 

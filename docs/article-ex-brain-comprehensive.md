@@ -43,7 +43,7 @@ ebrain tag add notes/golang-goroutine go concurrency
 
 ### 场景三：项目文档管理
 
-项目经理/技术负责人管理 PRD、技术方案、会议纪要时，使用 `ebrain ingest` 自动摄取 PDF/Word/HTML，或一条 `ebrain smart-ingest` 完成编译+时间线+实体链接的全流程。
+项目经理/技术负责人管理 PRD、技术方案、会议纪要时，使用 `ebrain put --file` 自动摄取 PDF/Word/HTML，或一条 `ebrain smart-ingest` 完成编译+时间线+实体链接的全流程。
 
 ### 场景四：人物关系网络
 
@@ -124,9 +124,11 @@ ebrain smart-ingest companies/river-ai --file article.md --source web_clip
 
 ```bash
 # 支持 PDF、Word(.docx)、HTML、JSON、Markdown、纯文本
-ebrain ingest report.pdf
-ebrain ingest meeting-notes.docx
-ebrain ingest https://example.com/whitepaper.pdf
+ebrain put --file report.pdf
+ebrain put --file meeting-notes.docx
+ebrain put --file https://example.com/whitepaper.pdf
+ebrain put --file article.html              # HTML -> readable Markdown
+cat article.html | ebrain put clips/article --stdin --format html
 ```
 
 格式自动识别（参数指定 → HTTP Content-Type → 文件扩展名 → magic bytes → UTF-8 兜底）。
@@ -248,7 +250,7 @@ Claude Desktop 配置：
 ├─────────────────────────────────────────────────────┤
 │                     命令层                           │
 │  put │ get │ search │ query │ compile │ timeline    │
-│  link │ tag │ import │ export │ ingest │ graph     │
+│  link │ tag │ import │ export │ graph │ serve      │
 ├─────────────────────────────────────────────────────┤
 │                     仓库层                           │
 │           BrainRepository (brain-repo.ts)           │
@@ -360,7 +362,7 @@ AI 层提供三大核心能力：
 | **零交互** | 所有输入通过 flag 或 stdin，AI Agent 可安全调用 |
 | **幂等性** | `put`、`link`、`tag add` 重复执行不产生副作用 |
 | **--dry-run** | 所有写操作支持预览，不实际修改数据 |
-| **--stdin** | `put`、`ingest`、`raw set` 支持管道输入 |
+| **--stdin** | `put`、`raw set` 支持管道输入；`put --stdin --format html` 支持长 HTML 字符串 |
 | **结构化输出** | `--json` 统一输出 JSON，供脚本解析 |
 | **快速失败** | 缺少必要参数时立即报错并给出用法示例 |
 | **命令可预测** | 统一 `resource verb` 模式（如 `timeline list`） |
@@ -417,7 +419,7 @@ ebrain graph --open
 cat article.md | ebrain put notes/article-slug --stdin
 
 # 2. 摄取 PDF 论文
-ebrain ingest research-paper.pdf --slug papers/slug
+ebrain put papers/slug --file research-paper.pdf
 
 # 3. 智能整理（编译 + 时间线 + 实体链接一步到位）
 ebrain smart-ingest topics/machine-learning --file textbook-chapter.md
@@ -453,7 +455,7 @@ ebrain query --llm "解释 transformer 的 self-attention 机制"
 | 写入笔记 | `ebrain put <slug> --file <path>` |
 | 更新已有知识（智能） | `ebrain compile <slug> <info> --source <src>` |
 | 一步到位（编译+时间线+链接） | `ebrain smart-ingest <slug> --file <path>` |
-| 处理 PDF/Word 文档 | `ebrain ingest <file>` |
+| 处理 PDF/Word/HTML 文档 | `ebrain put --file <file>` |
 | 搜索知识 | `ebrain search <query>` |
 | 语义问答 | `ebrain query <question>` |
 | AI 问答（LLM 合成） | `ebrain query --llm <question>` |

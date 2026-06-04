@@ -374,10 +374,10 @@ bun install -g ex-brain
 ebrain init
 
 # 写第一个页面
-ebrain put companies/river-ai --type company --content "
+cat <<'EOF' | ebrain put companies/river-ai --type company --stdin
 River AI 做 AI 分析平台的。
 2020 年成立的。
-"
+EOF
 
 # 编译一条新信息
 ebrain compile companies/river-ai \

@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 import {
   detectKind,
+  htmlToMarkdown,
   htmlToPlainText,
   isRemoteUrl,
   loadDocument,
@@ -102,6 +103,42 @@ describe("htmlToPlainText", () => {
   });
 });
 
+describe("htmlToMarkdown", () => {
+  test("extracts readable article content and preserves markdown structure", async () => {
+    const html = `<!doctype html>
+<html>
+  <head><title>Ignored Browser Title</title></head>
+  <body>
+    <nav>Navigation should not be imported</nav>
+    <article>
+      <h1>Article Title</h1>
+      <p>Hello <a href="/docs">docs</a>. This article contains enough real paragraph text for Readability to recognize it as the main content area rather than treating the whole page as a tiny fragment.</p>
+      <p>Ex-Brain keeps imported documents as markdown so headings, links, images, and list structure remain useful for browsing and retrieval later.</p>
+      <ul><li>First</li><li>Second</li></ul>
+      <img src="/hero.png" alt="Hero">
+      <p>The final paragraph gives the extractor additional signal and makes this fixture closer to a normal clipped web article.</p>
+    </article>
+  </body>
+</html>`;
+    const result = await htmlToMarkdown(html, "https://example.com/page");
+    expect(result.markdown).toContain("# Article Title");
+    expect(result.markdown).toContain("[docs](https://example.com/docs)");
+    expect(result.markdown).toContain("* First");
+    expect(result.markdown).toContain("![Hero](https://example.com/hero.png)");
+    expect(result.markdown).not.toContain("Navigation should not be imported");
+    expect(result.metadata.parser).toBe("html-readability-markdown");
+    expect(result.metadata.readability).toBe(true);
+  });
+
+  test("preserves markdown structure for small HTML clips", async () => {
+    const html = `<div><h1>Small Clip</h1><p>See <a href="/x">x</a>.</p><img src="/x.png" alt="X"></div>`;
+    const result = await htmlToMarkdown(html, "https://example.com/base");
+    expect(result.markdown).toContain("# Small Clip");
+    expect(result.markdown).toContain("[x](https://example.com/x)");
+    expect(result.markdown).toContain("![X](https://example.com/x.png)");
+  });
+});
+
 // ---------------------------------------------------------------------------
 // loadDocument — local files
 // ---------------------------------------------------------------------------
@@ -128,18 +165,20 @@ describe("loadDocument: local files", () => {
     expect(doc.text).toContain("- item one");
   });
 
-  test("strips HTML and produces plain text", async () => {
+  test("converts HTML to markdown", async () => {
     const path = join(workDir, "page.html");
     await writeFile(
       path,
-      "<html><body><h1>Hi</h1><p>Body &amp; tail</p></body></html>",
+      "<html><body><article><h1>Hi</h1><p>Body &amp; <a href=\"/tail\">tail</a></p><img src=\"pic.png\" alt=\"Pic\"></article></body></html>",
       "utf8",
     );
     const doc = await loadDocument(path);
     expect(doc.kind).toBe("html");
-    expect(doc.text).toContain("Hi");
-    expect(doc.text).toContain("Body & tail");
+    expect(doc.text).toContain("# Hi");
+    expect(doc.text).toContain("[tail](");
+    expect(doc.text).toContain("![Pic](");
     expect(doc.text).not.toContain("<");
+    expect(doc.metadata.parser).toBe("html-readability-markdown");
   });
 
   test("pretty-prints JSON files", async () => {

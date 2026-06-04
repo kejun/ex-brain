@@ -1246,6 +1246,49 @@ function getGraphHtml(): string {
     #ask-input:disabled {
       opacity: 0.5;
     }
+    #ask-controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border-bottom: 1px solid #333;
+      background: #1c1c1c;
+    }
+    .ask-control-group {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .ask-control-spacer {
+      flex: 1;
+    }
+    .ask-control-btn {
+      min-width: 32px;
+      height: 28px;
+      padding: 0 10px;
+      border: 1px solid #333;
+      border-radius: 6px;
+      background: #252525;
+      color: #d0d0d0;
+      font-size: 12px;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .ask-control-btn:hover {
+      background: #303030;
+      color: #fff;
+      border-color: #444;
+    }
+    .ask-control-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    #ask-font-size-label {
+      min-width: 42px;
+      color: #888;
+      font-size: 11px;
+      text-align: center;
+    }
     #ask-submit {
       padding: 8px 16px;
       background: #4a9eff;
@@ -1267,7 +1310,7 @@ function getGraphHtml(): string {
       flex: 1;
       min-height: 0;
       overflow-y: auto;
-      font-size: 13px;
+      font-size: var(--ask-result-font-size, 13px);
       line-height: 1.6;
     }
     #ask-result .sources {
@@ -1288,7 +1331,7 @@ function getGraphHtml(): string {
       background: #252525;
       border: 1px solid #333;
       border-radius: 4px;
-      font-size: 12px;
+      font-size: 0.92em;
       color: #4a9eff;
       cursor: pointer;
     }
@@ -1304,7 +1347,7 @@ function getGraphHtml(): string {
       background: #1e3a5f;
       border: 1px solid #2a5a8f;
       border-radius: 3px;
-      font-size: 11px;
+      font-size: 0.85em;
       line-height: 1.4;
       color: #5ba3e6;
       cursor: pointer;
@@ -1355,7 +1398,7 @@ function getGraphHtml(): string {
       cursor: nwse-resize;
     }
     #ask-result .markdown-content {
-      font-size: 13px;
+      font-size: inherit;
       line-height: 1.6;
     }
     #ask-result .markdown-content code {
@@ -1363,7 +1406,7 @@ function getGraphHtml(): string {
       padding: 2px 6px;
       border-radius: 4px;
       font-family: 'SF Mono', Monaco, monospace;
-      font-size: 12px;
+      font-size: 0.92em;
     }
     #ask-result .markdown-content pre {
       background: #2a2a2a;
@@ -1542,6 +1585,15 @@ function getGraphHtml(): string {
         <div id="ask-input-row">
           <input type="text" id="ask-input" placeholder="Ask a question about your knowledge base..." />
           <button id="ask-submit">Send</button>
+        </div>
+        <div id="ask-controls">
+          <div class="ask-control-group">
+            <button class="ask-control-btn" id="ask-font-decrease" title="Decrease answer font size">A-</button>
+            <span id="ask-font-size-label">13px</span>
+            <button class="ask-control-btn" id="ask-font-increase" title="Increase answer font size">A+</button>
+          </div>
+          <div class="ask-control-spacer"></div>
+          <button class="ask-control-btn" id="ask-reset" title="Clear the current answer and ask again">Reset</button>
         </div>
         <div id="ask-result"></div>
       </div>
@@ -2212,8 +2264,38 @@ function getGraphHtml(): string {
     var askSubmit = document.getElementById('ask-submit');
     var askClose = document.getElementById('ask-close');
     var askBtn = document.getElementById('btn-ask');
+    var askReset = document.getElementById('ask-reset');
+    var askFontDecrease = document.getElementById('ask-font-decrease');
+    var askFontIncrease = document.getElementById('ask-font-increase');
+    var askFontSizeLabel = document.getElementById('ask-font-size-label');
+    var askResultFontSize = 13;
+    var minAskResultFontSize = 11;
+    var maxAskResultFontSize = 22;
     var isStreaming = false;
     var askPositioned = false;
+
+    function setAskResultFontSize(size) {
+      askResultFontSize = Math.max(minAskResultFontSize, Math.min(maxAskResultFontSize, size));
+      askResult.style.setProperty('--ask-result-font-size', askResultFontSize + 'px');
+      askFontSizeLabel.textContent = askResultFontSize + 'px';
+      askFontDecrease.disabled = askResultFontSize <= minAskResultFontSize;
+      askFontIncrease.disabled = askResultFontSize >= maxAskResultFontSize;
+    }
+
+    function resetAskPanelContent() {
+      if (isStreaming && window._askAbort) {
+        window._askAbort.abort();
+      }
+      isStreaming = false;
+      window._askAbort = null;
+      askInput.disabled = false;
+      askSubmit.disabled = false;
+      askInput.value = '';
+      askResult.innerHTML = '';
+      askInput.focus();
+    }
+
+    setAskResultFontSize(askResultFontSize);
 
     document.addEventListener('keydown', function(e) {
       if (e.key !== 'Escape') return;
@@ -2237,6 +2319,13 @@ function getGraphHtml(): string {
         window._askAbort && window._askAbort.abort();
       }
     });
+    askFontDecrease.addEventListener('click', function() {
+      setAskResultFontSize(askResultFontSize - 1);
+    });
+    askFontIncrease.addEventListener('click', function() {
+      setAskResultFontSize(askResultFontSize + 1);
+    });
+    askReset.addEventListener('click', resetAskPanelContent);
 
     function ensureAskPanelPosition() {
       if (askPositioned) return;

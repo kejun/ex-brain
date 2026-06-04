@@ -147,7 +147,7 @@ bun run dist/cli.js --help
 ## 核心命令
 
 - `ebrain config` — 查看当前生效的配置
-- `ebrain put <slug> --file <path>`（也支持 `--stdin`，幂等 upsert；省略 slug 时自动生成）
+- `ebrain put <slug> --file <path>`（支持 Markdown、PDF、DOCX、HTML、TXT、JSON、URL；也支持 `--stdin`，幂等 upsert；省略 slug 时自动生成）
 - `ebrain get <slug>`（`--json` 输出结构化数据）
 - `ebrain delete <slug>`（支持 `--dry-run` 预览删除影响）
 - `ebrain list [--type person] [--tag yc]`
@@ -165,7 +165,7 @@ bun run dist/cli.js --help
 - `ebrain raw set <slug> --source x --data '{"a":1}'`（也支持 `--stdin`）
 - `ebrain import <paths...>`（支持 `--dry-run` 预览；`--skip-index` 跳过向量索引以避免 seekdb 崩溃。接受目录和/或文件，支持 shell glob 如 `*.docx`）
 - `ebrain export --dir <dir>`
-- `ebrain ingest [source] [--type doc] [--slug …] [--format pdf|docx|html|json|markdown|text] [--max-bytes N] [--timeout ms]` — 接受本地文件路径或 `http(s)://` URL，自动抽取 PDF / Word `.docx` / HTML / JSON / 纯文本（亦支持 `--stdin`），详见 `docs/document-ingestion.md`
+- `ebrain put --file <source> [--format pdf|docx|html|json|markdown|text] [--max-bytes N] [--timeout ms]` — 接受本地文件路径或 `http(s)://` URL，自动抽取 PDF / Word `.docx` / JSON / 纯文本；HTML 会先抽正文再转 Markdown。长 HTML 字符串可用 `--stdin --format html`，详见 `docs/document-ingestion.md`
 - `ebrain embed <slug>` / `ebrain embed --all`
 - `ebrain init`
 - `ebrain stats`
@@ -182,7 +182,7 @@ bun run dist/cli.js --help
 - **零交互**：所有输入通过 flag 或 stdin，智能体可安全调用
 - **幂等**：`put`、`link`、`tag add` 等操作重复执行不产生副作用
 - **--dry-run**：所有写操作支持预览，不实际修改数据
-- **--stdin**：`put`、`ingest`、`raw set` 支持管道输入
+- **--stdin**：`put`、`raw set` 支持管道输入；`put --stdin --format html` 可导入长 HTML 字符串
 - **结构化输出**：`--json` 统一输出 JSON，智能体可解析
 - **快速失败**：缺少必要参数时立即报错并给出正确用法示例
 - **命令可预测**：`timeline list`/`tag list`/`raw get` 遵循 `resource verb` 模式

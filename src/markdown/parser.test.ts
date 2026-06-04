@@ -20,7 +20,7 @@ Line one
 
 ---
 
-Timeline here
+- **2025-01-01** | event — Timeline here
 `;
     const parsed = parsePageMarkdown(input);
     expect(parsed.compiledTruth).toContain("Line one");
@@ -51,6 +51,33 @@ Content here
     expect(parsed.compiledTruth).toBe("Just plain content");
     expect(parsed.timeline).toBe("");
     expect(parsed.frontmatter).toEqual({});
+  });
+
+  test("treats a leading horizontal rule as body when there is no metadata", () => {
+    const input = `---
+
+Body that intentionally starts after a horizontal rule.
+`;
+    const parsed = parsePageMarkdown(input);
+    expect(parsed.compiledTruth).toBe(input.trim());
+    expect(parsed.timeline).toBe("");
+    expect(parsed.frontmatter).toEqual({});
+  });
+
+  test("does not split ordinary horizontal rules into timeline", () => {
+    const input = `---
+title: HR Body
+---
+Intro
+
+---
+
+More body after a markdown horizontal rule.
+`;
+    const parsed = parsePageMarkdown(input);
+    expect(parsed.compiledTruth).toContain("Intro");
+    expect(parsed.compiledTruth).toContain("More body after a markdown horizontal rule.");
+    expect(parsed.timeline).toBe("");
   });
 
   test("handles empty input", () => {

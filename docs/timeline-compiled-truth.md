@@ -58,7 +58,7 @@ CLI 命令：
 
 ```bash
 # 1. 创建初始页面 (种子轮状态)
-ebrain put companies/river-ai --type company --content "Funding Stage: Seed"
+echo "Funding Stage: Seed" | ebrain put companies/river-ai --type company --stdin
 
 # 2. 编译新信息: A轮融资
 ebrain compile companies/river-ai \

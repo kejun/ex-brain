@@ -69,7 +69,7 @@ ebrain list --tag go
 
 ```bash
 # 初始页面
-ebrain put companies/river-ai --type company --content "Funding Stage: Seed"
+echo "Funding Stage: Seed" | ebrain put companies/river-ai --type company --stdin
 
 # 智能编译新融资信息
 ebrain compile companies/river-ai \
@@ -100,7 +100,7 @@ ebrain timeline list companies/river-ai
 
 **方案**：
 - 使用 `ebrain put` 直接写入 Markdown 文件
-- 使用 `ebrain ingest` 自动摄取 PDF/Word/HTML 文档
+- 使用 `ebrain put --file` 自动摄取 PDF/Word/HTML 文档
 - 使用 `ebrain smart-ingest` 一次性完成编译 + 时间线 + 实体链接
 
 ```bash
@@ -108,7 +108,7 @@ ebrain timeline list companies/river-ai
 ebrain put projects/alpha-prd --type project --file prd.md
 
 # 摄取 PDF 技术方案
-ebrain ingest technical-design.pdf --slug projects/alpha-tech
+ebrain put projects/alpha-tech --file technical-design.pdf
 
 # 智能摄取（完整 AI 处理链路）
 ebrain smart-ingest projects/alpha-launch --file weekly-report.md --source weekly_report
@@ -326,13 +326,13 @@ ebrain serve --db /path/to/custom.db
 
 **问题**：资料包含 PDF、Word、HTML 等多种格式，手动提取文本再导入效率低。
 
-**方案**：`ebrain ingest` 和 `ebrain put --file` 支持自动格式检测和文本提取：
+**方案**：`ebrain put --file` 支持自动格式检测和内容提取：
 
 | 格式 | 扩展名 | 解析器 |
 |------|--------|--------|
 | PDF | `.pdf` | unpdf (PDF.js) |
 | Word | `.docx` | mammoth |
-| HTML | `.html` | 内置标签剥离 |
+| HTML | `.html` | Readability 正文抽取 + Markdown 转换 |
 | JSON | `.json` | JSON.stringify |
 | Markdown | `.md` | UTF-8 直接读取 |
 | 纯文本 | `.txt`/`.csv`/`.log` | UTF-8 直接读取 |
@@ -340,16 +340,19 @@ ebrain serve --db /path/to/custom.db
 
 ```bash
 # 本地文件
-ebrain ingest report.pdf
-ebrain ingest meeting-notes.docx
-ebrain ingest article.html
+ebrain put --file report.pdf
+ebrain put --file meeting-notes.docx
+ebrain put --file article.html
 
 # 远程 URL
-ebrain ingest https://example.com/whitepaper.pdf
-ebrain ingest https://example.com/article --format html
+ebrain put --file https://example.com/whitepaper.pdf
+ebrain put --file https://example.com/article --format html
 
 # 自定义 slug 和类型
-ebrain ingest report.pdf --slug docs/q4-report --type research-paper
+ebrain put docs/q4-report --file report.pdf --type research-paper
+
+# 长 HTML 字符串
+cat article.html | ebrain put clips/article --stdin --format html
 
 # put 命令也支持多格式
 ebrain put docs/api --file api.md
@@ -459,7 +462,7 @@ done
    cat article.md | ebrain put notes/article-slug --stdin
 
 3. 摄取 PDF 论文
-   ebrain ingest research-paper.pdf --slug papers/slug --type research-paper
+   ebrain put papers/slug --file research-paper.pdf --type research-paper
 
 4. 智能整理
    ebrain smart-ingest topics/machine-learning --file textbook-chapter.md
@@ -506,7 +509,7 @@ done
 ├─────────────────────────────────────────────────┤
 │                  命令层                          │
 │  put │ get │ search │ query │ compile │ timeline │
-│  link │ tag │ import │ export │ ingest │ graph  │
+│  link │ tag │ import │ export │ graph │ serve    │
 ├─────────────────────────────────────────────────┤
 │                  仓库层                          │
 │          BrainRepository (brain-repo.ts)         │
@@ -532,7 +535,7 @@ done
 | 写入笔记 | `ebrain put <slug> --file <path>` |
 | 更新已有知识（智能） | `ebrain compile <slug> <info> --source <src>` |
 | 一步到位（编译+时间线+链接） | `ebrain smart-ingest <slug> --file <path>` |
-| 处理 PDF/Word 文档 | `ebrain ingest <file>` |
+| 处理 PDF/Word/HTML 文档 | `ebrain put --file <file>` |
 | 搜索知识 | `ebrain search <query>` |
 | 语义问答 | `ebrain query <question>` |
 | AI 问答（LLM 合成） | `ebrain query --llm <question>` |

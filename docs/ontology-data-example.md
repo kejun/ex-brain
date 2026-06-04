@@ -181,5 +181,5 @@ River AI 是一家专注于企业级 AI 解决方案的科技公司，成立于 
 - **2025-01-10** | news — 完成 5000 万元 A 轮融资
 ```
 
-分隔线 `---` 之上是 `compiled_truth`，之下是 `timeline`。
-解析规则见 `src/markdown/parser.ts` 的 `splitCompiledAndTimeline()`。
+当分隔线 `---` 后面紧跟 `- **YYYY-MM-DD** | source — summary` 形式的时间线条目时，分隔线之上是 `compiled_truth`，之下是 `timeline`。普通 Markdown 水平线会保留在正文中；文件开头的 `---` 只有包含 YAML key（如 `title:`）时才会被识别为 frontmatter。
+解析规则见 `src/markdown/parser.ts` 的 `parsePageMarkdown()` 与 `splitCompiledAndTimeline()`。

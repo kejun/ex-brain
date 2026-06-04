@@ -6,16 +6,34 @@ export interface ParsedMarkdownPage {
   timeline: string;
 }
 
-const SPLIT_MARKER = /^-{3,}\s*$/m;
+const FRONTMATTER_FENCE = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
+const FRONTMATTER_KEY = /^[A-Za-z_][A-Za-z0-9_-]*\s*:/m;
+const SPLIT_MARKER = /^-{3,}\s*$(?:\r?\n)+(?:\s*)-\s+\*\*\d{4}-\d{2}-\d{2}\*\*\s*\|/m;
 
 export function parsePageMarkdown(input: string): ParsedMarkdownPage {
-  const parsed = matter(input);
+  const parsed = parseFrontmatter(input);
   const content = parsed.content.trim();
   const [compiledTruth, timeline] = splitCompiledAndTimeline(content);
   return {
     frontmatter: (parsed.data ?? {}) as Record<string, unknown>,
     compiledTruth: compiledTruth.trim(),
     timeline: timeline.trim(),
+  };
+}
+
+function parseFrontmatter(input: string): {
+  data: Record<string, unknown>;
+  content: string;
+} {
+  const match = input.match(FRONTMATTER_FENCE);
+  const frontmatter = match?.[1] ?? "";
+  if (!match || !FRONTMATTER_KEY.test(frontmatter)) {
+    return { data: {}, content: input };
+  }
+
+  return matter(input) as {
+    data: Record<string, unknown>;
+    content: string;
   };
 }
 
@@ -36,7 +54,7 @@ function splitCompiledAndTimeline(content: string): [string, string] {
     return [content, ""];
   }
   const left = content.slice(0, match.index);
-  const right = content.slice(match.index + match[0].length);
+  const right = content.slice(match.index).replace(/^-{3,}\s*(?:\r?\n)+/, "");
   return [left, right];
 }
 

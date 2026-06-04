@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **HTML to Markdown ingestion**: HTML files, URLs, and `put --stdin --format html` now use `@mozilla/readability` for article extraction and `node-html-markdown` for Markdown conversion, preserving headings, links, lists, and image references when possible.
+- **Ask Ex-Brain reading controls**: The graph Ask panel now includes answer font size controls and a reset button for clearing the current question/answer and asking again.
+
+### Changed
+
+- **Document import coverage**: Recursive document import now recognizes HTML, JSON, TXT, and legacy `.doc` candidates in addition to PDF/DOCX, matching the `put --file` document path.
+- **Markdown parsing robustness**: Page parsing now treats leading `---` as a body horizontal rule unless it is valid frontmatter, and timeline splitting only occurs on the ebrain timeline separator pattern.
+
 ## [0.3.0] - 2026-05-13
 
 ### Added

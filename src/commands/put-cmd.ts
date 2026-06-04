@@ -1,7 +1,7 @@
 import { basename, extname, resolve } from "node:path";
 import { Command } from "commander";
 import { inferTypeFromSlug, slugToTitle, normalizeLongSlug, slugify } from "../slug-utils";
-import { loadDocument, detectKind, type DocumentKind } from "../markdown/document-loader";
+import { htmlToMarkdown, loadDocument, detectKind, type DocumentKind } from "../markdown/document-loader";
 import { parsePageMarkdown, renderPageMarkdown } from "../markdown/parser";
 import { BrainRepository } from "../repositories/brain-repo";
 import {
@@ -62,10 +62,10 @@ export function registerPutCommand(program: Command): void {
       .command("put")
       .argument("[slug]", "page slug (optional; auto-generated if omitted)")
       .option("--file <path>", "read content from file (markdown, pdf, docx, html, txt, json)")
-      .option("--stdin", "read markdown from stdin", false)
+      .option("--stdin", "read markdown from stdin; use --format html to read HTML from stdin", false)
       .option("--type <type>", "page type override")
       .option("--title <title>", "page title override")
-      .option("--format <kind>", "force document kind (pdf|docx|html|json|markdown|text) — only needed for --file with non-md files when auto-detect fails")
+      .option("--format <kind>", "force document kind (pdf|docx|html|json|markdown|text); use html with --stdin for HTML strings")
       .option("--max-bytes <number>", "max bytes for URL/file ingest", "52428800")
       .option("--timeout <ms>", "fetch timeout for URLs in ms", "30000")
       .description(
@@ -83,6 +83,7 @@ Examples:
   ebrain put --file https://example.com/a.pdf  # URL → download + extract
   cat note.md | ebrain put --stdin          # auto-generate slug from title/timestamp
   ebrain put --title "My Note" --stdin      # auto-generate slug from title
+  cat page.html | ebrain put clips/page --stdin --format html
   ebrain put people/john --type person --title "John Doe"
   ebrain put docs/api --file api.md --dry-run
 `,
@@ -261,7 +262,127 @@ Examples:
         return;
       }
 
-      // ── Branch 2: markdown (stdin or .md file) ──
+      // ── Branch 2: HTML from stdin ──
+      if (!opts.file && opts.stdin && forceKind === "html") {
+        const input = await resolveInput(undefined, true);
+        if (!input.trim()) {
+          throw new Error("empty input — pipe HTML to stdin");
+        }
+
+        const converted = await htmlToMarkdown(input);
+        const content = converted.markdown;
+        const hash = contentHash(content);
+
+        let finalSlug = slug;
+        if (!finalSlug) {
+          if (opts.title) {
+            finalSlug = normalizeLongSlug(slugify(opts.title));
+          } else if (converted.metadata.readableTitle) {
+            finalSlug = normalizeLongSlug(slugify(String(converted.metadata.readableTitle)));
+          } else {
+            const timestamp = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, "");
+            finalSlug = `ingest/${timestamp}`;
+          }
+        }
+
+        const type = opts.type ?? "html";
+        const title =
+          opts.title ??
+          String(converted.metadata.readableTitle ?? slugToTitle(finalSlug));
+        const frontmatter: Record<string, unknown> = {
+          sourceType: "stdin",
+          sourceKind: "html",
+          sourceBytes: Buffer.byteLength(input, "utf8"),
+          _contentHash: hash,
+          ...converted.metadata,
+        };
+
+        if (isDryRun(opts)) {
+          print(program, {
+            dryRun: true,
+            action: "put",
+            slug: finalSlug,
+            type,
+            title,
+            kind: "html",
+            sourceType: "stdin",
+            contentLength: content.length,
+            contentHash: hash,
+            metadata: converted.metadata,
+          });
+          return;
+        }
+
+        await withRepo(program, async (repo) => {
+          const jsonOut = isJson(program);
+          const spinner = createSpinner();
+          const startTime = Date.now();
+
+          const existingPage = await repo.getPage(finalSlug);
+          const existingHash = existingPage?.frontmatter._contentHash as string | undefined;
+          if (existingHash === hash) {
+            if (!jsonOut) {
+              header(`Put: ${finalSlug}`);
+              success(`Content unchanged — skipped (hash: ${hash})`);
+            }
+            print(program, {
+              ok: true,
+              action: "put",
+              slug: finalSlug,
+              unchanged: true,
+              contentHash: hash,
+            });
+            return;
+          }
+
+          if (!jsonOut) {
+            header(`Put: ${finalSlug}`);
+            keyValue("Kind", "html");
+            keyValue("Source", "stdin");
+            if (existingPage) {
+              keyValue("Previous hash", existingHash ?? "none");
+              keyValue("New hash", hash);
+            }
+            spinner.start("Creating page from HTML...");
+          }
+
+          const page = await repo.putPage({
+            slug: finalSlug,
+            type,
+            title,
+            compiledTruth: content,
+            timeline: "",
+            frontmatter,
+          });
+
+          if (!jsonOut) {
+            spinner.succeed(`Page saved: ${page.slug}`);
+            keyValue("Title", title);
+            keyValue("Type", type);
+            keyValue("Content length", `${content.length} chars`);
+          }
+
+          await applyEntityLinks(repo, finalSlug, content, jsonOut);
+
+          if (!jsonOut) {
+            const duration = formatDuration(Date.now() - startTime);
+            success(`Operation completed in ${duration}`);
+          }
+
+          print(program, {
+            ok: true,
+            action: "put",
+            slug: page.slug,
+            kind: "html",
+            sourceType: "stdin",
+            contentLength: content.length,
+            contentHash: hash,
+          });
+        });
+        return;
+      }
+
+      // ── Branch 3: markdown (stdin or .md file) ──
       const input = await resolveInput(opts.file, opts.stdin ?? false);
       if (!input.trim()) {
         throw new Error(

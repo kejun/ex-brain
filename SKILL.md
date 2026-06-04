@@ -51,7 +51,7 @@ Run `ebrain config` to view current configuration.
 # Write page (idempotent upsert)
 ebrain put <slug> --file <path>
 ebrain put <slug> --stdin           # pipe input
-ebrain put <slug> --type <type> --content "content"
+cat page.html | ebrain put <slug> --stdin --format html
 
 # Get page
 ebrain get <slug>
@@ -150,26 +150,28 @@ ebrain import ./docs --skip-index   # skip vector indexing (avoid seekdb crash)
 
 ### Page Creation (put)
 
-`ebrain put` accepts markdown files **and** auto-detects non-markdown documents (PDF, DOCX, HTML, TXT, JSON) and http(s) URLs. Markdown files go through `parsePageMarkdown` (preserving frontmatter, timelines, wiki links); non-markdown files go through `loadDocument` for text extraction. Re-importing identical content is detected via content hash — the operation is instantly skipped without side-effects.
+`ebrain put` accepts markdown files **and** auto-detects non-markdown documents (PDF, DOCX, HTML, TXT, JSON) and http(s) URLs. Markdown files go through `parsePageMarkdown` (preserving frontmatter, timelines, wiki links); HTML goes through Readability article extraction and Markdown conversion; other non-markdown files go through `loadDocument` for text extraction. Re-importing identical content is detected via content hash — the operation is instantly skipped without side-effects.
 
 ```bash
 # Markdown (parsed with frontmatter/timeline/wiki-links)
 ebrain put docs/api --file api.md
 
-# PDF / DOCX / HTML / TXT / JSON (auto text extraction)
+# PDF / DOCX / HTML / TXT / JSON
 ebrain put --file report.pdf
 ebrain put docs/report --file report.pdf  # explicit slug
 ebrain put --file https://example.com/whitepaper.pdf
+ebrain put --file article.html             # HTML -> readable Markdown
 ebrain put --file article.docx --format text  # force format
 
 # Pipe input
 ebrain put my/note --stdin < note.md
+cat page.html | ebrain put clips/page --stdin --format html
 
 # Dry-run preview
 ebrain put --file report.pdf --dry-run
 ```
 
-Each document ingest writes the extracted text to `compiled_truth`, records a timeline event, stores source metadata in the page frontmatter (`sourceFile`, `sourceType`, `sourceKind`, `sourceMimeType`, `sourceBytes`, parser stats, `_contentHash`), and a structured row in `raw_data` for traceability.
+Each document ingest writes extracted text or Markdown to `compiled_truth`, records a timeline event, stores source metadata in the page frontmatter (`sourceFile`, `sourceType`, `sourceKind`, `sourceMimeType`, `sourceBytes`, parser stats, `_contentHash`), and a structured row in `raw_data` for traceability. HTML metadata includes the readability/markdown parser details when available.
 
 ### Knowledge Graph Visualization
 
@@ -236,7 +238,7 @@ When encountering new information, prefer `compile` over direct `put`:
 ebrain compile companies/river-ai "new information" --source news
 
 # Avoid: Simple append (information bloats)
-ebrain put companies/river-ai --content "appended content"
+echo "appended content" | ebrain put companies/river-ai --stdin
 ```
 
 ### 2. Mark Information Source
@@ -255,7 +257,7 @@ Specify type when writing pages for easier filtering:
 
 ```bash
 ebrain put companies/river-ai --type company --file notes.md
-ebrain put people/sarah-chen --type person --content "..."
+echo "..." | ebrain put people/sarah-chen --type person --stdin
 ```
 
 ### 4. Use Pipe Input
@@ -290,6 +292,7 @@ ebrain list --type company --json | jq '.[] | .slug'
 - **Embedding**: Local Hash or OpenAI Compatible API
 - **LLM**: Ax Signature + GEPA framework (`@ax-llm/ax`) for smart compilation, timeline extraction, entity linking with structured `f.json()` output
 - **AI Adapter**: Custom Ax adapter with DashScope compatibility (`enable_thinking: false`)
+- **HTML ingestion**: `@mozilla/readability` + `node-html-markdown` for readable article extraction and Markdown conversion
 
 ## References
 
@@ -297,4 +300,4 @@ ebrain list --type company --json | jq '.[] | .slug'
 - [Detailed CLI Documentation](./docs/ebrain-cli.md)
 - [Timeline & Compilation Mechanism](./docs/timeline-compiled-truth.md)
 - [Knowledge Graph Commands](./docs/graph-command.md)
-- [Document Ingestion (PDF / Word / URL)](./docs/document-ingestion.md)
+- [Document Ingestion (PDF / Word / HTML / URL)](./docs/document-ingestion.md)

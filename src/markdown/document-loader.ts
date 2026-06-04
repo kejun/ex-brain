@@ -1,5 +1,6 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import { basename, extname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 /** Supported document kinds for ingestion. */
 export type DocumentKind =
@@ -13,7 +14,7 @@ export type DocumentKind =
   | "unknown";
 
 export interface LoadedDocument {
-  /** Extracted plain-text content (utf-8). */
+  /** Extracted text/markdown content (utf-8). */
   text: string;
   /** Original file/URL name without parent path. */
   fileName: string;
@@ -285,6 +286,71 @@ export function htmlToPlainText(html: string): string {
   return s.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
+export async function htmlToMarkdown(
+  html: string,
+  sourceUrl?: string,
+): Promise<{ markdown: string; metadata: Record<string, unknown> }> {
+  const { JSDOM } = await import("jsdom");
+  const { Readability } = await import("@mozilla/readability");
+  const { NodeHtmlMarkdown } = await import("node-html-markdown");
+
+  let readableHtml = "";
+  let metadata: Record<string, unknown> = {
+    parser: "html-readability-markdown",
+  };
+
+  try {
+    const dom = new JSDOM(html, sourceUrl ? { url: sourceUrl } : undefined);
+    const article = new Readability(dom.window.document).parse();
+    if (article?.content?.trim()) {
+      readableHtml = article.content;
+      metadata = {
+        ...metadata,
+        readability: true,
+        readableTitle: article.title,
+        excerpt: article.excerpt,
+        textLength: article.length,
+        siteName: article.siteName,
+      };
+    }
+  } catch (err) {
+    metadata = {
+      ...metadata,
+      readability: false,
+      readabilityError: err instanceof Error ? err.message : String(err),
+    };
+  }
+
+  const sourceHtml = readableHtml || html;
+  if (!readableHtml) {
+    metadata = {
+      ...metadata,
+      readability: false,
+    };
+  }
+
+  try {
+    const markdown = NodeHtmlMarkdown.translate(sourceHtml).trim();
+    if (markdown) {
+      return { markdown, metadata };
+    }
+  } catch (err) {
+    metadata = {
+      ...metadata,
+      markdownError: err instanceof Error ? err.message : String(err),
+    };
+  }
+
+  return {
+    markdown: htmlToPlainText(html),
+    metadata: {
+      ...metadata,
+      parser: "html-strip",
+      markdownFallback: "plain-text",
+    },
+  };
+}
+
 async function extractPdf(
   bytes: Buffer,
 ): Promise<{ text: string; metadata: Record<string, unknown> }> {
@@ -329,7 +395,8 @@ async function extractDocx(
  * Supported kinds:
  *  - PDF (`.pdf`, `application/pdf`) → text via `unpdf`
  *  - Word `.docx` → text via `mammoth`
- *  - HTML / Markdown / JSON / plain text → utf-8 decoded (HTML stripped)
+ *  - HTML → Readability article extraction + Markdown conversion
+ *  - Markdown / JSON / plain text → utf-8 decoded
  *
  * Unsupported `.doc` (legacy OLE) raises a clear error.
  */
@@ -407,8 +474,11 @@ export async function loadDocument(
         `legacy .doc (OLE) format is not supported — convert to .docx or PDF first (e.g. via libreoffice --convert-to docx ${fileName})`,
       );
     case "html": {
-      text = htmlToPlainText(bytes.toString("utf8"));
-      metadata = { parser: "html-strip" };
+      const html = bytes.toString("utf8");
+      const baseUrl = sourceType === "url" ? source : pathToFileURL(source).href;
+      const out = await htmlToMarkdown(html, baseUrl);
+      text = out.markdown;
+      metadata = out.metadata;
       break;
     }
     case "json": {
@@ -485,11 +555,20 @@ function looksLikeText(bytes: Buffer): boolean {
   return textLike / sample.length >= 0.95;
 }
 
-/** File extensions eligible for document ingestion (binary/office formats). */
-const DOCUMENT_EXTENSIONS = new Set(["pdf", "docx"]);
+/** File extensions eligible for document ingestion. */
+const DOCUMENT_EXTENSIONS = new Set([
+  "pdf",
+  "docx",
+  "doc",
+  "html",
+  "htm",
+  "json",
+  "txt",
+  "text",
+]);
 
 /**
- * Recursively collect `.docx` and `.pdf` files under `dir`.
+ * Recursively collect supported document files under `dir`.
  * Returns sorted absolute paths.
  */
 export async function collectDocumentFiles(dir: string): Promise<string[]> {
