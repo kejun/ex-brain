@@ -1,6 +1,6 @@
 {
   "name": "ex-brain",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "CLI personal knowledge base powered by seekdb",
   "module": "src/cli.ts",
   "type": "module",
