@@ -228,7 +228,7 @@ Examples:
             if (!question) {
               return Response.json({ error: "Missing question" }, { status: 400 });
             }
-            return handleAskQuestion(repo, question);
+            return handleAskQuestion(repo, question, req.signal);
           }
           
           // Serve the HTML page
@@ -394,7 +394,7 @@ async function collectAskContext(
   return { sections, totalChars, stats };
 }
 
-async function handleAskQuestion(repo: BrainRepository, question: string): Promise<Response> {
+async function handleAskQuestion(repo: BrainRepository, question: string, abortSignal?: AbortSignal): Promise<Response> {
   const settings = await loadSettings();
   const llm = settings.llm;
 
@@ -476,17 +476,51 @@ ${context}
   const stream = new ReadableStream({
     async start(controller) {
       let finished = false;
-      const safeEnqueue = (data: Uint8Array) => {
-        if (!finished) controller.enqueue(data);
+      let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+      const upstreamAbort = new AbortController();
+      const timeout = setTimeout(() => upstreamAbort.abort(), 60_000);
+      const closeStream = () => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timeout);
+        try {
+          controller.close();
+        } catch {
+          // The client may have already closed the browser-side stream.
+        }
       };
-      const safeClose = () => {
-        if (!finished) { finished = true; controller.close(); }
+      const stopUpstream = () => {
+        upstreamAbort.abort();
+        void reader?.cancel().catch(() => {});
       };
+      const sendEvent = (event: unknown) => {
+        if (finished) return false;
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+          return true;
+        } catch (error) {
+          finished = true;
+          clearTimeout(timeout);
+          stopUpstream();
+          console.warn('[ask] SSE send stopped:', String(error));
+          return false;
+        }
+      };
+      const finishResponse = () => {
+        sendEvent({ type: 'done' });
+        closeStream();
+        stopUpstream();
+      };
+      const onClientAbort = () => {
+        closeStream();
+        stopUpstream();
+      };
+      abortSignal?.addEventListener('abort', onClientAbort, { once: true });
+      if (abortSignal?.aborted) onClientAbort();
+
       try {
         // Send sources first
-        safeEnqueue(encoder.encode(
-          `data: ${JSON.stringify({ type: 'sources', sources })}\n\n`
-        ));
+        sendEvent({ type: 'sources', sources });
 
         // Build URL
         const baseUrl = llm.baseURL || 'https://dashscope.aliyuncs.com/compatible-mode/v1';
@@ -512,19 +546,17 @@ ${context}
             max_tokens: 4096,
             thinking: { type: 'disabled' },
           }),
-          signal: AbortSignal.timeout(60_000),
+          signal: upstreamAbort.signal,
         });
 
         if (!response.ok) {
           const errorText = await response.text().catch(() => '');
-          safeEnqueue(encoder.encode(
-            `data: ${JSON.stringify({ type: 'error', message: `LLM API error: ${response.status} ${errorText.replace(/[\n\r]/g, ' ')}` })}\n\n`
-          ));
-          safeClose();
+          sendEvent({ type: 'error', message: `LLM API error: ${response.status} ${errorText.replace(/[\n\r]/g, ' ')}` });
+          closeStream();
           return;
         }
 
-        const reader = response.body!.getReader();
+        reader = response.body!.getReader();
         const textDecoder = new TextDecoder();
         let buffer = '';
         let totalChars = 0;
@@ -550,26 +582,22 @@ ${context}
             if (!trimmed.startsWith('data: ')) {
               // Check for [DONE] signal in non-data lines
               if (trimmed === '[DONE]') {
-                safeEnqueue(encoder.encode(
-                  `data: ${JSON.stringify({ type: 'done' })}\n\n`
-                ));
-                safeClose();
+                finishResponse();
                 return;
               }
               continue;
             }
 
             try {
-              const json = JSON.parse(trimmed.slice(6));
+              const payload = trimmed.slice(6).trim();
 
               // Check for [DONE] marker
-              if (trimmed === 'data: [DONE]') {
-                safeEnqueue(encoder.encode(
-                  `data: ${JSON.stringify({ type: 'done' })}\n\n`
-                ));
-                safeClose();
+              if (payload === '[DONE]') {
+                finishResponse();
                 return;
               }
+
+              const json = JSON.parse(payload);
 
               const delta = json.choices?.[0]?.delta;
               const content = delta?.content;
@@ -577,18 +605,13 @@ ${context}
 
               if (content) {
                 totalChars += content.length;
-                safeEnqueue(encoder.encode(
-                  `data: ${JSON.stringify({ type: 'delta', content })}\n\n`
-                ));
+                sendEvent({ type: 'delta', content });
               }
 
               // Check for finish_reason with a non-null value (stream ended)
               if (finishReason && finishReason !== 'null' && finishReason !== null) {
                 console.log(`[ask] LLM finished with reason: ${finishReason}, total chars: ${totalChars}`);
-                safeEnqueue(encoder.encode(
-                  `data: ${JSON.stringify({ type: 'done' })}\n\n`
-                ));
-                safeClose();
+                finishResponse();
                 return;
               }
             } catch (parseErr) {
@@ -604,18 +627,14 @@ ${context}
         if (buffer.trim() && !finished) {
           const trimmed = buffer.trim();
           if (trimmed === 'data: [DONE]' || trimmed === '[DONE]') {
-            safeEnqueue(encoder.encode(
-              `data: ${JSON.stringify({ type: 'done' })}\n\n`
-            ));
+            sendEvent({ type: 'done' });
           } else if (trimmed.startsWith('data: ')) {
             try {
               const json = JSON.parse(trimmed.slice(6));
               const content = json.choices?.[0]?.delta?.content;
               if (content) {
                 totalChars += content.length;
-                safeEnqueue(encoder.encode(
-                  `data: ${JSON.stringify({ type: 'delta', content })}\n\n`
-                ));
+                sendEvent({ type: 'delta', content });
               }
             } catch { /* ignore */ }
           }
@@ -623,16 +642,17 @@ ${context}
 
         // Always send done at end of stream if we got any content
         if (totalChars > 0 && !finished) {
-          safeEnqueue(encoder.encode(
-            `data: ${JSON.stringify({ type: 'done' })}\n\n`
-          ));
+          sendEvent({ type: 'done' });
         }
-        safeClose();
+        closeStream();
       } catch (error) {
-        safeEnqueue(encoder.encode(
-          `data: ${JSON.stringify({ type: 'error', message: String(error).replace(/[\n\r]/g, ' ') })}\n\n`
-        ));
-        safeClose();
+        if (!finished) {
+          sendEvent({ type: 'error', message: String(error).replace(/[\n\r]/g, ' ') });
+        }
+        closeStream();
+      } finally {
+        clearTimeout(timeout);
+        abortSignal?.removeEventListener('abort', onClientAbort);
       }
     }
   });
@@ -1182,7 +1202,7 @@ function getGraphHtml(): string {
       width: 520px;
       min-width: 360px;
       max-width: calc(100vw - 40px);
-      max-height: min(720px, calc(100vh - 40px));
+      max-height: calc(100vh - 20px);
       background: #1a1a1a;
       border: 1px solid #333;
       border-radius: 12px;
@@ -1305,6 +1325,23 @@ function getGraphHtml(): string {
       opacity: 0.5;
       cursor: not-allowed;
     }
+    #ask-submit.loading {
+      position: relative;
+      padding-left: 34px;
+    }
+    #ask-submit.loading::before {
+      content: '';
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      width: 12px;
+      height: 12px;
+      margin-top: -6px;
+      border: 2px solid rgba(255, 255, 255, 0.45);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: ask-spin 0.8s linear infinite;
+    }
     #ask-result {
       padding: 16px;
       flex: 1;
@@ -1312,6 +1349,44 @@ function getGraphHtml(): string {
       overflow-y: auto;
       font-size: var(--ask-result-font-size, 13px);
       line-height: 1.6;
+    }
+    .ask-loading {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #b8c7d9;
+      font-size: 13px;
+    }
+    .ask-loading::before {
+      content: '';
+      width: 14px;
+      height: 14px;
+      border: 2px solid #34475f;
+      border-top-color: #4a9eff;
+      border-radius: 50%;
+      animation: ask-spin 0.8s linear infinite;
+      flex: 0 0 auto;
+    }
+    .ask-stream-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 10px 0 12px;
+      color: #8da2ba;
+      font-size: 12px;
+    }
+    .ask-stream-status::before {
+      content: '';
+      width: 10px;
+      height: 10px;
+      border: 2px solid #33465d;
+      border-top-color: #4a9eff;
+      border-radius: 50%;
+      animation: ask-spin 0.8s linear infinite;
+      flex: 0 0 auto;
+    }
+    @keyframes ask-spin {
+      to { transform: rotate(360deg); }
     }
     #ask-result .sources {
       margin-bottom: 12px;
@@ -1604,6 +1679,10 @@ function getGraphHtml(): string {
     
     // ── Config ──
     var labelsVisible = true;
+    var labelLodNodeThreshold = 600;
+    var maxDefaultLabelCount = 120;
+    var nearCameraLabelRatio = 0.42;
+    var lastLabelLodRefresh = 0;
     const typeColors = {
       person: '#4caf50', company: '#2196f3', project: '#ff9800',
       note: '#9c27b0', deal: '#f44336', yc: '#ff5722',
@@ -1696,17 +1775,76 @@ function getGraphHtml(): string {
       renderNodeList(document.getElementById('search-input').value);
     }
 
+    function getLabelQualityScore(node) {
+      var label = (node.label || node.id || '').toString().trim();
+      if (!label) return 0;
+      var score = 0.45;
+      if (label.length >= 2 && label.length <= 24) score += 0.25;
+      if (label.indexOf('/') === -1) score += 0.15;
+      if (!/^[a-z0-9-_/]+$/.test(label)) score += 0.1;
+      if (!/^(untitled|unknown|other)$/i.test(label)) score += 0.05;
+      return Math.min(1, score);
+    }
+
+    function getTypeImportanceScore(type) {
+      var scores = {
+        person: 1,
+        company: 0.95,
+        project: 0.9,
+        organization: 0.9,
+        deal: 0.85,
+        event: 0.8,
+        civic: 0.7,
+        yc: 0.65,
+        note: 0.45,
+        other: 0.35,
+      };
+      return scores[type] || 0.5;
+    }
+
+    function getBridgeScore(node, maxNeighborTypeCount) {
+      var typeSet = new Set();
+      (node.neighbors || []).forEach(function(nb) {
+        if (nb && nb.type) typeSet.add(nb.type);
+      });
+      if (maxNeighborTypeCount <= 1) return typeSet.size > 1 ? 1 : 0;
+      return Math.min(1, typeSet.size / maxNeighborTypeCount);
+    }
+
     function prepareGraphVisuals() {
       var degrees = computeDegrees();
       var maxDeg = Math.max(1);
+      var maxNeighborTypeCount = 1;
       var keys = Object.keys(degrees);
       for (var i = 0; i < keys.length; i++) {
         if (degrees[keys[i]] > maxDeg) maxDeg = degrees[keys[i]];
       }
+      graphData.nodes.forEach(function(n) {
+        var typeSet = new Set();
+        (n.neighbors || []).forEach(function(nb) {
+          if (nb && nb.type) typeSet.add(nb.type);
+        });
+        if (typeSet.size > maxNeighborTypeCount) maxNeighborTypeCount = typeSet.size;
+      });
 
       graphData.nodes.forEach(function(n) {
-        n.val = 12 + 36 * ((degrees[n.id]||0) / maxDeg);
+        n.degree = degrees[n.id] || 0;
+        n.val = 12 + 36 * (n.degree / maxDeg);
         n.color = typeColors[n.type] || typeColors.other;
+        n.importanceScore =
+          (n.degree / maxDeg) * 0.45 +
+          getTypeImportanceScore(n.type) * 0.25 +
+          getBridgeScore(n, maxNeighborTypeCount) * 0.2 +
+          getLabelQualityScore(n) * 0.1;
+      });
+
+      var rankedNodes = graphData.nodes.slice().sort(function(a, b) {
+        if (b.importanceScore !== a.importanceScore) return b.importanceScore - a.importanceScore;
+        return (b.degree || 0) - (a.degree || 0);
+      });
+      var defaultLabelNodes = new Set(rankedNodes.slice(0, maxDefaultLabelCount).map(function(n) { return n.id; }));
+      graphData.nodes.forEach(function(n) {
+        n.showDefaultLabel = defaultLabelNodes.has(n.id);
       });
     }
 
@@ -1854,25 +1992,79 @@ function getGraphHtml(): string {
       return highlightLinks.has(link) ? 'rgba(119,119,119,1)' : 'rgba(119,119,119,0.375)';
     }
 
+    function linkDisplayWidth(link) {
+      if (!hasSelectedFocus()) return 0.45;
+      return highlightLinks.has(link) ? 0.9 : 0.35;
+    }
+
+    function isLabelLodEnabled() {
+      return graphData && graphData.nodes.length > labelLodNodeThreshold;
+    }
+
+    function getNodeCameraDistance(node) {
+      if (!Graph || typeof node.x !== 'number' || typeof node.y !== 'number' || typeof node.z !== 'number') return Infinity;
+      var cam = Graph.camera();
+      var dx = node.x - cam.position.x;
+      var dy = node.y - cam.position.y;
+      var dz = node.z - cam.position.z;
+      return Math.sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    function isNearCameraNode(node) {
+      if (!Graph || !node) return false;
+      var cam = Graph.camera();
+      var controls = Graph.controls();
+      var target = controls ? controls.target : { x: 0, y: 0, z: 0 };
+      var cx = cam.position.x - target.x;
+      var cy = cam.position.y - target.y;
+      var cz = cam.position.z - target.z;
+      var cameraRadius = Math.sqrt(cx * cx + cy * cy + cz * cz) || 1;
+      return getNodeCameraDistance(node) <= cameraRadius * nearCameraLabelRatio;
+    }
+
+    function shouldRenderNodeLabel(node) {
+      if (!labelsVisible) return false;
+      if (!isLabelLodEnabled()) return true;
+      if (hasSelectedFocus()) return node === selectedNode3D || highlightNodes.has(node);
+      if (hoverNode) return highlightNodes.has(node);
+      return Boolean(node.showDefaultLabel) || isNearCameraNode(node);
+    }
+
+    function updateNodeLabelSprite(sprite, node, text) {
+      sprite.material.depthWrite = false;
+      sprite.material.transparent = true;
+      sprite.material.opacity = isFocusedNode(node) ? 1 : 0.78;
+      sprite.fontFace = uiFontFamily;
+      sprite.color = node.color || '#fff';
+      sprite.textHeight = node === selectedNode3D ? 10 : 6;
+      sprite.center.y = -0.6;
+      sprite.visible = true;
+      sprite.__labelText = text;
+      return sprite;
+    }
+
     function createNodeLabelSprite(node) {
-      if (!labelsVisible) return null;
+      if (!shouldRenderNodeLabel(node)) return null;
       var text = (node.label || node.id || '').toString();
       if (text.length > 16) text = text.slice(0, 16) + '…';
       if (!text) return null;
       try {
-        var sprite = new SpriteText(text);
-        sprite.material.depthWrite = false;
-        sprite.material.transparent = true;
-        sprite.material.opacity = isFocusedNode(node) ? 1 : 0.3;
-        sprite.fontFace = uiFontFamily;
-        sprite.color = node.color || '#fff';
-        sprite.textHeight = node === selectedNode3D ? 10 : 6;
-        sprite.center.y = -0.6;
-        return sprite;
+        if (!node.__labelSprite || node.__labelSprite.__labelText !== text) {
+          node.__labelSprite = new SpriteText(text);
+        }
+        return updateNodeLabelSprite(node.__labelSprite, node, text);
       } catch(e) {
         console.warn('SpriteText error for node', node.id, e);
         return null;
       }
+    }
+
+    function scheduleLabelLodRefresh() {
+      if (!isLabelLodEnabled() || !labelsVisible || !Graph) return;
+      var now = Date.now();
+      if (now - lastLabelLodRefresh < 150) return;
+      lastLabelLodRefresh = now;
+      refreshGraph();
     }
 
     function clusterCenter(type) {
@@ -1943,7 +2135,7 @@ function getGraphHtml(): string {
           return label + '  (' + n.id + ')';
         })
         .linkColor(linkDisplayColor)
-        .linkWidth(0.8)
+        .linkWidth(linkDisplayWidth)
         .linkOpacity(0.8)
         .linkMaterial(null)
         .linkDirectionalArrowLength(0)
@@ -1978,14 +2170,15 @@ function getGraphHtml(): string {
       applyClusterForceLayout();
 
       // Auto-rotate
-      // Controls are created asynchronously by three-render-objects.
-      // Wait a tick to ensure they are attached before configuring.
-      setTimeout(function() {
-        var controls = Graph.controls();
-        if (!controls) return;
-        controls.autoRotate = false;
-        controls.zoomToCursor = true;
-      }, 0);
+	      // Controls are created asynchronously by three-render-objects.
+	      // Wait a tick to ensure they are attached before configuring.
+	      setTimeout(function() {
+	        var controls = Graph.controls();
+	        if (!controls) return;
+	        controls.autoRotate = false;
+	        controls.zoomToCursor = true;
+	        controls.addEventListener('change', scheduleLabelLodRefresh);
+	      }, 0);
       container.setAttribute('tabindex', '0');
       // Keyboard rotation via spherical coordinates — no THREE dependency needed.
       container.addEventListener('keydown', function(e) {
@@ -2017,9 +2210,10 @@ function getGraphHtml(): string {
         pos.x = tgt.x + r * Math.sin(phi) * Math.sin(theta);
         pos.y = tgt.y + r * Math.cos(phi);
         pos.z = tgt.z + r * Math.sin(phi) * Math.cos(theta);
-        cam.lookAt(tgt);
-        cam.updateMatrixWorld();
-      });
+	        cam.lookAt(tgt);
+	        cam.updateMatrixWorld();
+	        scheduleLabelLodRefresh();
+	      });
       container.focus(); // Ensure container receives keyboard events
 
     }
@@ -2271,28 +2465,63 @@ function getGraphHtml(): string {
     var askResultFontSize = 13;
     var minAskResultFontSize = 11;
     var maxAskResultFontSize = 22;
-    var isStreaming = false;
-    var askPositioned = false;
+	    var isStreaming = false;
+	    var askPositioned = false;
+	    var askSubmitDefaultText = askSubmit.textContent;
 
-    function setAskResultFontSize(size) {
-      askResultFontSize = Math.max(minAskResultFontSize, Math.min(maxAskResultFontSize, size));
+	    function setAskResultFontSize(size) {
+	      askResultFontSize = Math.max(minAskResultFontSize, Math.min(maxAskResultFontSize, size));
       askResult.style.setProperty('--ask-result-font-size', askResultFontSize + 'px');
       askFontSizeLabel.textContent = askResultFontSize + 'px';
       askFontDecrease.disabled = askResultFontSize <= minAskResultFontSize;
-      askFontIncrease.disabled = askResultFontSize >= maxAskResultFontSize;
-    }
+	      askFontIncrease.disabled = askResultFontSize >= maxAskResultFontSize;
+	    }
 
-    function resetAskPanelContent() {
-      if (isStreaming && window._askAbort) {
-        window._askAbort.abort();
-      }
-      isStreaming = false;
-      window._askAbort = null;
-      askInput.disabled = false;
-      askSubmit.disabled = false;
-      askInput.value = '';
-      askResult.innerHTML = '';
-      askInput.focus();
+	    function setAskLoading(message) {
+	      askSubmit.classList.add('loading');
+	      askSubmit.textContent = 'Loading';
+	      askSubmit.disabled = true;
+	      askInput.disabled = true;
+	      if (message) {
+	        askResult.innerHTML = '<div class="ask-loading">' + escapeHtml(message) + '</div>';
+	      }
+	    }
+
+	    function setAskStreamStatus(message) {
+	      var status = document.getElementById('ask-stream-status');
+	      if (!status) {
+	        status = document.createElement('div');
+	        status.id = 'ask-stream-status';
+	        status.className = 'ask-stream-status';
+	        askResult.appendChild(status);
+	      }
+	      status.textContent = message;
+	    }
+
+	    function clearAskStreamStatus() {
+	      var status = document.getElementById('ask-stream-status');
+	      if (status && status.parentNode) status.parentNode.removeChild(status);
+	    }
+
+	    function finishAskLoading() {
+	      isStreaming = false;
+	      window._askAbort = null;
+	      clearAskStreamStatus();
+	      askSubmit.classList.remove('loading');
+	      askSubmit.textContent = askSubmitDefaultText;
+	      askSubmit.disabled = false;
+	      askInput.disabled = false;
+	      askInput.focus();
+	    }
+
+	    function resetAskPanelContent() {
+	      if (isStreaming && window._askAbort) {
+	        window._askAbort.abort();
+	      }
+	      finishAskLoading();
+	      askInput.value = '';
+	      askResult.innerHTML = '';
+	      askInput.focus();
     }
 
     setAskResultFontSize(askResultFontSize);
@@ -2335,24 +2564,27 @@ function getGraphHtml(): string {
       askPositioned = true;
     }
 
-    function clampAskPanel() {
-      var rect = askPanel.getBoundingClientRect();
-      var left = Math.max(10, Math.min(window.innerWidth - rect.width - 10, rect.left));
-      var top = Math.max(10, Math.min(window.innerHeight - rect.height - 10, rect.top));
-      askPanel.style.left = left + 'px';
+	    function clampAskPanel() {
+	      var rect = askPanel.getBoundingClientRect();
+	      var maxHeight = Math.max(180, window.innerHeight - 20);
+	      if (rect.height > maxHeight) {
+	        askPanel.style.height = maxHeight + 'px';
+	        rect = askPanel.getBoundingClientRect();
+	      }
+	      var left = Math.max(10, Math.min(window.innerWidth - rect.width - 10, rect.left));
+	      var top = Math.max(10, Math.min(window.innerHeight - rect.height - 10, rect.top));
+	      askPanel.style.left = left + 'px';
       askPanel.style.top = top + 'px';
     }
 
     function askQuestion() {
       var question = askInput.value.trim();
-      if (!question || isStreaming) return;
+	      if (!question || isStreaming) return;
 
-      isStreaming = true;
-      askSubmit.disabled = true;
-      askInput.disabled = true;
-      askResult.innerHTML = '<div class="loading">Searching knowledge base...</div>';
+	      isStreaming = true;
+	      setAskLoading('Searching knowledge base...');
 
-      window._askAbort = new AbortController();
+	      window._askAbort = new AbortController();
 
       fetch('/api/ask?q=' + encodeURIComponent(question), {
         signal: window._askAbort.signal
@@ -2424,10 +2656,10 @@ function getGraphHtml(): string {
             if (result.done) {
               // Stream ended - finalize
               try {
-                if (answerContainer && sourcesContainer && answer.length > 0) {
-                  answerContainer.innerHTML = renderAnswer(answer);
-                  sourcesContainer.innerHTML = buildSourcesHtml();
-                  bindSourceClicks();
+	                if (answerContainer && sourcesContainer && answer.length > 0) {
+	                  answerContainer.innerHTML = renderAnswer(answer);
+	                  sourcesContainer.innerHTML = buildSourcesHtml();
+	                  bindSourceClicks();
                   bindCitationClicks();
                 } else if (answer.length > 0) {
                   var finalHtml = buildSourcesHtml() +
@@ -2436,17 +2668,14 @@ function getGraphHtml(): string {
                   bindSourceClicks();
                   bindCitationClicks();
                 } else if (sources.length === 0) {
-                  askResult.innerHTML = '<div class="error">No response received.</div>';
-                }
-              } catch (finalizeErr) {
-                console.error('Finalize error:', finalizeErr);
-              }
-              isStreaming = false;
-              askSubmit.disabled = false;
-              askInput.disabled = false;
-              askInput.focus();
-              return;
-            }
+	                  askResult.innerHTML = '<div class="error">No response received.</div>';
+	                }
+	              } catch (finalizeErr) {
+	                console.error('Finalize error:', finalizeErr);
+	              }
+	              finishAskLoading();
+	              return;
+	            }
 
             buffer += decoder.decode(result.value, { stream: true });
             var lines = buffer.split(String.fromCharCode(10));
@@ -2459,19 +2688,20 @@ function getGraphHtml(): string {
 
               try {
                 var data = JSON.parse(line.slice(6));
-                if (data.type === 'sources') {
-                  sources = data.sources || [];
-                  askResult.innerHTML = buildSourcesHtml() +
-                    '<div class="answer markdown-content" id="stream-answer"></div>';
-                  sourcesContainer = askResult.querySelector('.sources');
-                  answerContainer = document.getElementById('stream-answer');
-                  initAnswerContainer();
-                  bindSourceClicks();
-                } else if (data.type === 'delta') {
-                  answer += data.content;
-                  if (answerContainer) {
-                    answerContainer.innerHTML = renderAnswer(answer);
-                    bindCitationClicks();
+	                if (data.type === 'sources') {
+	                  sources = data.sources || [];
+	                  askResult.innerHTML = buildSourcesHtml() +
+	                    '<div class="answer markdown-content" id="stream-answer"></div>';
+	                  sourcesContainer = askResult.querySelector('.sources');
+	                  answerContainer = document.getElementById('stream-answer');
+	                  initAnswerContainer();
+	                  bindSourceClicks();
+	                  setAskStreamStatus('Generating answer...');
+	                } else if (data.type === 'delta') {
+	                  answer += data.content;
+	                  if (answerContainer) {
+	                    answerContainer.innerHTML = renderAnswer(answer);
+	                    bindCitationClicks();
                   }
                 } else if (data.type === 'done') {
                   // Finalize
@@ -2483,30 +2713,28 @@ function getGraphHtml(): string {
                       sourcesContainer.innerHTML = buildSourcesHtml();
                       bindSourceClicks();
                       bindCitationClicks();
-                    }
-                  } catch (finalizeErr) {
-                    console.error('Finalize error:', finalizeErr);
-                  }
-                  isStreaming = false;
-                  askSubmit.disabled = false;
-                  askInput.disabled = false;
-                  askInput.focus();
-                } else if (data.type === 'error') {
-                  askResult.innerHTML = '<div class="error">Error: ' + escapeHtml(data.message) + '</div>';
-                  isStreaming = false;
-                  askSubmit.disabled = false;
-                  askInput.disabled = false;
-                }
+	                    }
+	                  } catch (finalizeErr) {
+	                    console.error('Finalize error:', finalizeErr);
+	                  }
+	                  finishAskLoading();
+	                } else if (data.type === 'error') {
+	                  askResult.innerHTML = '<div class="error">Error: ' + escapeHtml(data.message) + '</div>';
+	                  finishAskLoading();
+	                }
               } catch (e) {
                 // Skip malformed SSE lines, don't break the stream
               }
             }
 
             return read();
-          }).catch(function(err) {
-            // Handle stream read errors
-            if (err.name === 'AbortError') return;
-            console.error('Stream read error:', err);
+	          }).catch(function(err) {
+	            // Handle stream read errors
+	            if (err.name === 'AbortError') {
+	              finishAskLoading();
+	              return;
+	            }
+	            console.error('Stream read error:', err);
             try {
               if (answerContainer && answer.length > 0) {
                 answerContainer.innerHTML = renderAnswer(answer);
@@ -2519,27 +2747,26 @@ function getGraphHtml(): string {
                 askResult.innerHTML = finalHtml;
                 bindSourceClicks();
                 bindCitationClicks();
-              } else {
-                askResult.innerHTML = '<div class="error">Connection error: ' + escapeHtml(String(err)) + '</div>';
-              }
-            } catch (e) {
-              askResult.innerHTML = '<div class="error">Connection error: ' + escapeHtml(String(err)) + '</div>';
-            }
-            isStreaming = false;
-            askSubmit.disabled = false;
-            askInput.disabled = false;
-          });
-        }
+	              } else {
+	                askResult.innerHTML = '<div class="error">Connection error: ' + escapeHtml(String(err)) + '</div>';
+	              }
+	            } catch (e) {
+	              askResult.innerHTML = '<div class="error">Connection error: ' + escapeHtml(String(err)) + '</div>';
+	            }
+	            finishAskLoading();
+	          });
+	        }
 
         return read();
-      }).catch(function(err) {
-        if (err.name === 'AbortError') return;
-        askResult.innerHTML = '<div class="error">Error: ' + escapeHtml(String(err)) + '</div>';
-        isStreaming = false;
-        askSubmit.disabled = false;
-        askInput.disabled = false;
-      });
-    }
+	      }).catch(function(err) {
+	        if (err.name === 'AbortError') {
+	          finishAskLoading();
+	          return;
+	        }
+	        askResult.innerHTML = '<div class="error">Error: ' + escapeHtml(String(err)) + '</div>';
+	        finishAskLoading();
+	      });
+	    }
 
     function buildResultHtml(answer, sources, question) {
       var html = '';
@@ -2646,18 +2873,22 @@ function getGraphHtml(): string {
         nodeDetail.style.left   = Math.max(0, elemStartX + dx)+'px';
         nodeDetail.style.width  = newWidth+'px';
         nodeDetail.style.height = newHeight+'px';
-      }
-      if (isAskDragging) {
-        askPanel.style.left = Math.max(10, Math.min(window.innerWidth - askPanel.offsetWidth - 10, askStartLeft + e.clientX - askStartX)) + 'px';
-        askPanel.style.top = Math.max(10, Math.min(window.innerHeight - askPanel.offsetHeight - 10, askStartTop + e.clientY - askStartY)) + 'px';
-      }
+	      }
+	      if (isAskDragging) {
+	        var askMaxDragHeight = Math.max(180, window.innerHeight - 20);
+	        if (askPanel.offsetHeight > askMaxDragHeight) {
+	          askPanel.style.height = askMaxDragHeight + 'px';
+	        }
+	        askPanel.style.left = Math.max(10, Math.min(window.innerWidth - askPanel.offsetWidth - 10, askStartLeft + e.clientX - askStartX)) + 'px';
+	        askPanel.style.top = Math.max(10, Math.min(window.innerHeight - askPanel.offsetHeight - 10, askStartTop + e.clientY - askStartY)) + 'px';
+	      }
       if (isAskResizing) {
         var askDx = e.clientX - askStartX;
         var askDy = e.clientY - askStartY;
-        var minWidth = 360;
-        var minHeight = 180;
-        var maxWidth = window.innerWidth - 20;
-        var maxHeight = Math.min(720, window.innerHeight - askStartTop - 10);
+	        var minWidth = 360;
+	        var minHeight = 180;
+	        var maxWidth = window.innerWidth - 20;
+	        var maxHeight = Math.max(minHeight, window.innerHeight - askStartTop - 10);
         if (askResizeEdge === 'left') {
           var nextLeft = Math.max(10, Math.min(askStartLeft + askStartWidth - minWidth, askStartLeft + askDx));
           var nextWidth = Math.max(minWidth, Math.min(maxWidth, askStartWidth + askStartLeft - nextLeft));
