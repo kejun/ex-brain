@@ -4,17 +4,17 @@ CLI personal knowledge base built on [seekdb](https://docs.seekdb.ai/), featurin
 
 ## Demo 
 
-<video controls="true" width="800" height="438"><source src="https://obcommunityprod.oss-cn-shanghai.aliyuncs.com/prod/blog/2026-04/6aaf141a-75e6-4557-a37d-58036f52fb35.mp4" type="video/mp4"></video>
+<video controls="true" width="800" height="438"><source src="https://obcommunityprod.oss-cn-shanghai.aliyuncs.com/prod/blog/2026-06/528cea12-2646-49bf-8d7c-74f94818c34b.mp4" type="video/mp4"></video>
 
 ## Core Features
 
-- **Knowledge Graph Visualization** - Interactive graph showing entity relationships
+- **Knowledge Graph Visualization** - Interactive 3D graph with entity relationships, labels, and Ask Ex-Brain Q&A
 - **Intelligent Compilation** - Semantic analysis with smart Compiled Truth updates
 - **Timeline Management** - Automatic event extraction and history tracking
 - **Hybrid Search** - Full-text search + vector semantic queries
 - **Entity Linking** - Auto-detect entities and create linked pages
 
-<img src="https://mdn.alipayobjects.com/huamei_ytl0i7/afts/img/A*jyPOT4CzwL0AAAAAgBAAAAgAejCYAQ/original" width="800">
+<img src="https://mdn.alipayobjects.com/huamei_ytl0i7/afts/img/A*NGWjTJNpX18AAAAAgCAAAAgAejCYAQ/80p" width="800">
 
 ## Data Collection
 
@@ -52,38 +52,100 @@ ebrain --help
 
 ## Quick Start
 
+### 1. Configure
+
 ```bash
 # Initialize (creates ~/.ebrain/data/ebrain.db automatically)
 ebrain init
 
-# Write a page
+# Check active config
+ebrain config
+```
+
+Configure LLM and embeddings in `~/.ebrain/settings.json` if you want semantic search, AI compilation, and Ask Ex-Brain Q&A. Local hash embeddings work out of the box for lightweight use.
+
+### 2. Import Knowledge
+
+```bash
+# Import Markdown or HTML directly
 ebrain put my/note --file note.md
 ebrain put articles/page --file article.html
 
-# Knowledge graph visualization
+# Pipe long content
+cat article.md | ebrain put articles/slug --stdin
+cat article.html | ebrain put articles/html-page --stdin --format html
+
+# Batch import a directory
+ebrain import ./docs --dry-run
+ebrain import ./docs
+
+# Compile + timeline + entity links in one command
+ebrain smart-ingest companies/river-ai --file article.md
+```
+
+HTML input is extracted with Readability and converted to Markdown before storage, preserving readable structure, links, and images where possible.
+
+### 3. Open Web UI
+
+```bash
 ebrain graph                    # Start graph Web UI (http://localhost:3000)
 ebrain graph --port 8080 --open # Custom port and auto-open browser
+```
 
-# Intelligently compile new information
-ebrain compile companies/river-ai "River AI completed Series A funding" --source meeting_notes
+### 4. Explore And Ask
 
-# Extract timeline events from a page
-ebrain timeline extract companies/river-ai
+Use the graph Web UI to search entities, filter by type, inspect node details, rename or merge entities, and explore relationships. Open **Ask Ex-Brain** from the graph toolbar to ask natural-language questions with sourced answers.
 
-# Search
+You can also query from the CLI:
+
+```bash
 ebrain search "some topic"
 ebrain query "some question"
-
-# AI-powered Q&A with LLM (RAG)
 ebrain query --llm "What is the main idea of River AI's product?"
-ebrain query --llm "What are Mario Zechner's main views on game development?"
+```
 
-# Smart ingest: compile + timeline + entity links in one command
-ebrain smart-ingest companies/river-ai --file article.md
+## Agent Integration With eBrain MCP
 
-# Start MCP Server (for AI tool integration)
+Start the MCP server:
+
+```bash
 ebrain serve
 ```
+
+Configure your agent or MCP client:
+
+```json
+{
+  "mcpServers": {
+    "ebrain": {
+      "command": "ebrain",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+Agents can then use eBrain tools to read and write pages, search the knowledge base, compile new facts, create entity links, extract timelines, and ingest PDF / Word / HTML / text documents.
+
+## Knowledge Graph Web UI
+
+<img src="https://mdn.alipayobjects.com/huamei_ytl0i7/afts/img/A*C0wrTJMgBosAAAAAgBAAAAgAejCYAQ/80p" width="800">
+
+Start the interactive 3D knowledge graph:
+
+```bash
+ebrain graph --open
+```
+
+The graph UI includes:
+
+- Entity relationship visualization with type-based colors and clustering
+- Search, type filters, fit view, node details, entity rename/merge actions
+- Toggleable labels with performance-aware rendering for large graphs
+- Important-node labels shown by default, plus nearby labels as you move the camera
+- Lighter default links, with highlighted links preserved during focus/selection
+- **Ask Ex-Brain** floating panel for sourced Q&A over the knowledge base
+- Ask controls for answer font size, reset/re-ask, loading state, and draggable/resizable layout
 
 ## Configuration
 
